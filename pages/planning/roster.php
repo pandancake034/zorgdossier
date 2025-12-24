@@ -3,7 +3,6 @@
 include '../../includes/header.php';
 require '../../config/db.php';
 
-// Alleen Management
 if ($_SESSION['role'] !== 'management') {
     echo "<script>window.location.href='../../dashboard.php';</script>";
     exit;
@@ -11,226 +10,165 @@ if ($_SESSION['role'] !== 'management') {
 
 $error = "";
 $success = "";
-
-// -------------------------------------------------------
-// DEEL 1: LOGICA VOOR NIEUWE DAGPLANNING (BOVENAAN)
-// -------------------------------------------------------
-$selected_date = $_GET['date'] ?? date('Y-m-d'); // Standaard vandaag
+$selected_date = $_GET['date'] ?? date('Y-m-d');
 $english_days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 $dutch_days   = ['Ma',  'Di',  'Wo',  'Do',  'Vr',  'Za',  'Zo'];
-
-// Bereken de Nederlandse dag afkorting (Ma, Di, etc.) op basis van de gekozen datum
 $day_en = date('D', strtotime($selected_date));
 $day_nl = str_replace($english_days, $dutch_days, $day_en);
 
-// Haal het rooster op specifiek voor deze dag
-$day_roster_stmt = $pdo->prepare("
-    SELECT r.id, rt.name as route_name, rt.district, np.first_name, np.last_name, u.username
-    FROM roster r
-    JOIN routes rt ON r.route_id = rt.id
-    JOIN users u ON r.nurse_id = u.id
-    LEFT JOIN nurse_profiles np ON u.id = np.user_id
-    WHERE r.day_of_week = ?
-    ORDER BY rt.name
-");
+// DAGOVERZICHT QUERY
+$day_roster_stmt = $pdo->prepare("SELECT r.id, rt.name as route_name, rt.district, np.first_name, np.last_name 
+                                  FROM roster r 
+                                  JOIN routes rt ON r.route_id = rt.id 
+                                  JOIN users u ON r.nurse_id = u.id 
+                                  LEFT JOIN nurse_profiles np ON u.id = np.user_id 
+                                  WHERE r.day_of_week = ? ORDER BY rt.name");
 $day_roster_stmt->execute([$day_nl]);
 $day_shifts = $day_roster_stmt->fetchAll();
 
-
-// -------------------------------------------------------
-// DEEL 2: LOGICA VOOR HET BESTAANDE BEHEER (ONDERIN)
-// -------------------------------------------------------
-
-// ACTIE: DIENST TOEVOEGEN
+// ACTIES (Toevoegen/Verwijderen)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] == 'add_shift') {
     $nurse_id = $_POST['nurse_id'];
     $route_id = $_POST['route_id'];
     $day = $_POST['day'];
-
-    // Check: Werkt deze zuster al ergens anders op deze dag?
     $check = $pdo->prepare("SELECT * FROM roster WHERE nurse_id = ? AND day_of_week = ?");
     $check->execute([$nurse_id, $day]);
     if ($check->rowCount() > 0) {
-        $error = "⚠️ Let op: Deze zuster staat al ingeroosterd op " . $day . " bij een andere route!";
+        $error = "Fout: Medewerker staat al ingeroosterd op $day.";
     } else {
-        try {
-            $stmt = $pdo->prepare("INSERT INTO roster (nurse_id, route_id, day_of_week) VALUES (?, ?, ?)");
-            $stmt->execute([$nurse_id, $route_id, $day]);
-            $success = "Dienst succesvol toegevoegd!";
-            // Refresh om de nieuwe data te tonen in beide overzichten
-            echo "<script>window.location.href='roster.php?date=$selected_date';</script>"; 
-            exit;
-        } catch (PDOException $e) {
-            $error = "Fout: " . $e->getMessage();
-        }
+        $pdo->prepare("INSERT INTO roster (nurse_id, route_id, day_of_week) VALUES (?, ?, ?)")->execute([$nurse_id, $route_id, $day]);
+        echo "<script>window.location.href='roster.php?date=$selected_date';</script>"; exit;
     }
 }
-
-// ACTIE: DIENST VERWIJDEREN
 if (isset($_GET['delete'])) {
-    $id = $_GET['delete'];
-    $pdo->prepare("DELETE FROM roster WHERE id = ?")->execute([$id]);
-    // Redirect behoudt de geselecteerde datum
-    $redir_date = $_GET['date'] ?? date('Y-m-d');
-    header("Location: roster.php?date=$redir_date"); 
-    exit;
+    $pdo->prepare("DELETE FROM roster WHERE id = ?")->execute([$_GET['delete']]);
+    header("Location: roster.php?date=$selected_date"); exit;
 }
 
-// DATA OPHALEN VOOR MATRIX
+// MATRIX DATA
 $nurses = $pdo->query("SELECT u.id, np.first_name, np.last_name FROM users u JOIN nurse_profiles np ON u.id = np.user_id WHERE u.role='zuster' ORDER BY np.first_name")->fetchAll();
 $routes = $pdo->query("SELECT * FROM routes ORDER BY name")->fetchAll();
-
-// ROOSTER MATRIX BOUWEN
-$roster_data = $pdo->query("
-    SELECT r.id, r.route_id, r.day_of_week, np.first_name, np.last_name 
-    FROM roster r
-    JOIN users u ON r.nurse_id = u.id
-    JOIN nurse_profiles np ON u.id = np.user_id
-")->fetchAll();
+$roster_data = $pdo->query("SELECT r.id, r.route_id, r.day_of_week, np.first_name, np.last_name FROM roster r JOIN users u ON r.nurse_id = u.id JOIN nurse_profiles np ON u.id = np.user_id")->fetchAll();
 
 $matrix = [];
 foreach($roster_data as $row) {
-    $matrix[$row['route_id']][$row['day_of_week']] = [
-        'id' => $row['id'],
-        'name' => $row['first_name'] . ' ' . substr($row['last_name'], 0, 1) . '.'
-    ];
+    $matrix[$row['route_id']][$row['day_of_week']] = ['id' => $row['id'], 'name' => $row['first_name'] . ' ' . substr($row['last_name'], 0, 1) . '.'];
 }
-
 $days_list = ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'];
 ?>
 
-<div class="max-w-7xl mx-auto mb-12">
+<div class="w-full max-w-7xl mx-auto">
 
-    <div class="flex justify-between items-center mb-6">
+    <div class="bg-white border border-gray-300 p-4 mb-4 flex justify-between items-center">
         <div>
-            <h2 class="text-3xl font-bold text-gray-800">📅 Personeelsrooster</h2>
-            <p class="text-gray-600">Beheer de dagplanning en het weekoverzicht.</p>
+            <h1 class="text-xl font-bold text-slate-800 uppercase tracking-tight">Personeelsplanning</h1>
+            <p class="text-xs text-slate-500">Dag- en weekroosters beheren</p>
         </div>
-        <a href="auto_schedule.php" class="text-teal-600 font-bold hover:underline text-sm">
-            Naar Auto-Scheduler →
+        <a href="auto_schedule.php" class="text-blue-700 hover:text-blue-900 text-sm font-bold flex items-center">
+            Naar Auto-Scheduler <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
         </a>
     </div>
 
-    <?php if($error): ?><div class="bg-red-100 text-red-700 p-3 rounded mb-4 border border-red-300"><?php echo $error; ?></div><?php endif; ?>
-    <?php if($success): ?><div class="bg-green-100 text-green-700 p-3 rounded mb-4 border border-green-300"><?php echo $success; ?></div><?php endif; ?>
+    <?php if($error): ?><div class="bg-red-50 border-l-4 border-red-600 text-red-800 p-3 text-sm mb-4 font-medium"><?php echo $error; ?></div><?php endif; ?>
 
-    <div class="bg-purple-50 rounded-lg shadow-md border border-purple-200 p-6 mb-10">
-        <div class="flex flex-col md:flex-row justify-between items-end mb-4 border-b border-purple-200 pb-4">
+    <div class="bg-slate-50 border border-gray-300 p-5 mb-8">
+        <div class="flex flex-col md:flex-row justify-between items-end mb-4 border-b border-gray-300 pb-4">
             <div>
-                <h3 class="text-xl font-bold text-purple-800 flex items-center">
-                    🔎 Dagoverzicht: <?php echo $day_nl; ?> <?php echo date('d-m-Y', strtotime($selected_date)); ?>
+                <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    Dagoverzicht: <span class="text-slate-900 ml-1"><?php echo $day_nl . ' ' . date('d-m-Y', strtotime($selected_date)); ?></span>
                 </h3>
-                <p class="text-sm text-purple-600">Zie direct wie er op deze specifieke datum rijdt.</p>
             </div>
             <form method="GET" class="flex items-center gap-2 mt-4 md:mt-0">
-                <label class="font-bold text-sm text-purple-700">Kies datum:</label>
                 <input type="date" name="date" value="<?php echo $selected_date; ?>" 
-                       class="p-2 border rounded font-bold text-purple-900" 
+                       class="p-1.5 border border-gray-300 text-sm font-medium text-slate-700 focus:border-blue-500 focus:ring-0" 
                        onchange="this.form.submit()">
             </form>
         </div>
 
         <?php if(count($day_shifts) > 0): ?>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <?php foreach($day_shifts as $shift): ?>
-                    <div class="bg-white p-4 rounded shadow-sm border-l-4 border-purple-500 flex justify-between items-center">
+                    <div class="bg-white p-3 border border-gray-200 border-l-4 border-l-blue-600 shadow-sm flex justify-between items-center">
                         <div>
-                            <div class="font-bold text-gray-800 text-lg"><?php echo htmlspecialchars($shift['route_name']); ?></div>
-                            <div class="text-xs text-gray-500 uppercase"><?php echo htmlspecialchars($shift['district']); ?></div>
+                            <div class="font-bold text-slate-800 text-sm"><?php echo htmlspecialchars($shift['route_name']); ?></div>
+                            <div class="text-xs text-slate-500 uppercase"><?php echo htmlspecialchars($shift['district']); ?></div>
                         </div>
                         <div class="text-right">
-                            <div class="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-bold">
-                                👩‍⚕️ <?php echo htmlspecialchars($shift['first_name'] . ' ' . $shift['last_name']); ?>
-                            </div>
+                            <span class="bg-slate-100 text-slate-700 px-2 py-0.5 text-xs font-bold border border-gray-200">
+                                <?php echo htmlspecialchars($shift['first_name'] . ' ' . substr($shift['last_name'],0,1)); ?>.
+                            </span>
                         </div>
                     </div>
                 <?php endforeach; ?>
             </div>
         <?php else: ?>
-            <div class="text-center py-6 text-gray-500 italic bg-white rounded border border-dashed border-gray-300">
-                Nog geen diensten gepland voor deze <?php echo $day_nl; ?>. <br>
-                Gebruik het formulier hieronder om iemand in te roosteren.
+            <div class="text-center py-4 text-sm text-slate-500 italic bg-white border border-gray-200 border-dashed">
+                Geen diensten gepland voor deze dag.
             </div>
         <?php endif; ?>
     </div>
 
-    <div class="border-t-4 border-gray-200 pt-8">
-        
-        <h3 class="text-lg font-bold text-gray-700 mb-4">✏️ Weekrooster Bewerken</h3>
+    <div class="bg-white border border-gray-300">
+        <div class="bg-slate-100 px-5 py-3 border-b border-gray-300 flex justify-between items-center">
+            <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wide">Weekrooster Matrix</h3>
+        </div>
 
-        <div class="bg-white p-4 rounded-lg shadow-lg mb-8 border-t-4 border-blue-600">
+        <div class="p-4 bg-white border-b border-gray-200">
             <form method="POST" class="flex flex-col md:flex-row gap-4 items-end">
                 <input type="hidden" name="action" value="add_shift">
                 
                 <div class="flex-1 w-full">
-                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">1. Kies Zuster</label>
-                    <select name="nurse_id" class="w-full p-2 border rounded font-bold" required>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Medewerker</label>
+                    <select name="nurse_id" class="w-full p-2 border border-gray-300 text-sm bg-gray-50 focus:bg-white transition-colors" required>
                         <option value="">-- Selecteer --</option>
-                        <?php foreach($nurses as $n): ?>
-                            <option value="<?php echo $n['id']; ?>"><?php echo htmlspecialchars($n['first_name'] . ' ' . $n['last_name']); ?></option>
-                        <?php endforeach; ?>
+                        <?php foreach($nurses as $n): echo "<option value='{$n['id']}'>".htmlspecialchars($n['first_name'].' '.$n['last_name'])."</option>"; endforeach; ?>
                     </select>
                 </div>
-
                 <div class="flex-1 w-full">
-                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">2. Kies Route</label>
-                    <select name="route_id" class="w-full p-2 border rounded" required>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Route</label>
+                    <select name="route_id" class="w-full p-2 border border-gray-300 text-sm bg-gray-50 focus:bg-white" required>
                         <option value="">-- Selecteer --</option>
-                        <?php foreach($routes as $r): ?>
-                            <option value="<?php echo $r['id']; ?>"><?php echo htmlspecialchars($r['name']); ?> (<?php echo $r['district']; ?>)</option>
-                        <?php endforeach; ?>
+                        <?php foreach($routes as $r): echo "<option value='{$r['id']}'>".htmlspecialchars($r['name'])." ({$r['district']})</option>"; endforeach; ?>
                     </select>
                 </div>
-
-                <div class="flex-1 w-full">
-                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">3. Kies Dag</label>
-                    <select name="day" class="w-full p-2 border rounded" required>
-                        <?php foreach($days_list as $d): ?>
-                            <option value="<?php echo $d; ?>"><?php echo $d; ?></option>
-                        <?php endforeach; ?>
+                <div class="w-32">
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Dag</label>
+                    <select name="day" class="w-full p-2 border border-gray-300 text-sm bg-gray-50 focus:bg-white" required>
+                        <?php foreach($days_list as $d): echo "<option value='$d'>$d</option>"; endforeach; ?>
                     </select>
                 </div>
-
-                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded shadow w-full md:w-auto">
-                    + Inroosteren
+                <button type="submit" class="bg-slate-800 hover:bg-slate-900 text-white font-medium py-2 px-6 text-sm h-[38px]">
+                    Toevoegen
                 </button>
             </form>
         </div>
 
-        <div class="bg-white rounded-lg shadow overflow-x-auto">
-            <table class="min-w-full border-collapse">
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm border-collapse">
                 <thead>
-                    <tr class="bg-gray-800 text-white text-sm uppercase">
-                        <th class="p-4 text-left border-r border-gray-700 w-48">Route</th>
+                    <tr class="bg-slate-50 text-slate-500 uppercase text-xs border-b border-gray-300">
+                        <th class="p-3 text-left w-48 border-r border-gray-200">Route</th>
                         <?php foreach($days_list as $d): ?>
-                            <th class="p-4 text-center border-l border-gray-700"><?php echo $d; ?></th>
+                            <th class="p-3 text-center border-l border-gray-200"><?php echo $d; ?></th>
                         <?php endforeach; ?>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200">
                     <?php foreach($routes as $r): ?>
-                        <tr class="hover:bg-gray-50">
-                            <td class="p-4 font-bold text-gray-800 border-r bg-gray-50">
+                        <tr class="hover:bg-slate-50 transition-colors">
+                            <td class="p-3 font-bold text-slate-800 border-r border-gray-200 bg-gray-50/30">
                                 <?php echo htmlspecialchars($r['name']); ?>
-                                <div class="text-xs text-gray-400 font-normal"><?php echo $r['district']; ?></div>
+                                <div class="text-[10px] text-slate-400 font-normal uppercase"><?php echo $r['district']; ?></div>
                             </td>
-
                             <?php foreach($days_list as $d): ?>
-                                <td class="p-2 border-l text-center h-16 relative group">
-                                    <?php if (isset($matrix[$r['id']][$d])): 
-                                        $shift = $matrix[$r['id']][$d];
-                                    ?>
-                                        <div class="inline-block bg-teal-100 text-teal-800 px-3 py-1 rounded-full text-sm font-bold shadow-sm relative pr-6">
-                                            <?php echo htmlspecialchars($shift['name']); ?>
-                                            
+                                <td class="p-2 border-l border-gray-200 text-center relative group h-14">
+                                    <?php if (isset($matrix[$r['id']][$d])): $shift = $matrix[$r['id']][$d]; ?>
+                                        <div class="inline-flex items-center justify-between w-full bg-blue-50 text-blue-800 px-2 py-1 text-xs font-bold border border-blue-200">
+                                            <span><?php echo htmlspecialchars($shift['name']); ?></span>
                                             <a href="?delete=<?php echo $shift['id']; ?>&date=<?php echo $selected_date; ?>" 
-                                               class="absolute right-1 top-1/2 transform -translate-y-1/2 text-teal-400 hover:text-red-500 font-bold px-1"
-                                               onclick="return confirm('Dienst verwijderen?');">
-                                                ×
-                                            </a>
+                                               class="text-blue-400 hover:text-red-600 ml-2" onclick="return confirm('Verwijderen?');">✕</a>
                                         </div>
-                                    <?php else: ?>
-                                        <span class="text-gray-200 text-2xl font-bold select-none opacity-20 group-hover:opacity-100 transition cursor-default">.</span>
                                     <?php endif; ?>
                                 </td>
                             <?php endforeach; ?>
@@ -240,11 +178,5 @@ $days_list = ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'];
             </table>
         </div>
     </div>
-
-    <div class="mt-4 text-gray-500 text-sm">
-        <p>💡 Tip: Gebruik het formulier om gaten in het rooster te vullen. Dubbele diensten worden geweigerd.</p>
-    </div>
-
 </div>
-
 <?php include '../../includes/footer.php'; ?>
