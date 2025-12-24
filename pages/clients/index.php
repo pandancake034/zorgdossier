@@ -4,19 +4,17 @@ include '../../includes/header.php';
 require '../../config/db.php';
 
 // 1. BEVEILIGING
-// Iedereen (Management & Zuster) mag dit zien, behalve familie.
 if ($_SESSION['role'] === 'familie') {
     echo "<script>window.location.href='../../dashboard.php';</script>";
     exit;
 }
 
-// 2. FILTERS OPHALEN
+// 2. FILTERS
 $search = $_GET['search'] ?? '';
 $filter_district = $_GET['district'] ?? '';
 $filter_wijk = $_GET['wijk'] ?? '';
 
-// 3. QUERY BOUWEN
-// We beginnen met een basis query en plakken er stukjes aan vast (WHERE ...)
+// 3. QUERY
 $sql = "SELECT * FROM clients WHERE is_active = 1";
 $params = [];
 
@@ -25,12 +23,10 @@ if ($search) {
     $params[] = "%$search%";
     $params[] = "%$search%";
 }
-
 if ($filter_district) {
     $sql .= " AND district = ?";
     $params[] = $filter_district;
 }
-
 if ($filter_wijk) {
     $sql .= " AND neighborhood = ?";
     $params[] = $filter_wijk;
@@ -46,154 +42,131 @@ try {
     die("Fout: " . $e->getMessage());
 }
 
-// Helper functie voor leeftijd
 function calculateAge($dob) {
-    $birthDate = new DateTime($dob);
-    $today = new DateTime('today');
-    return $birthDate->diff($today)->y;
+    return (new DateTime($dob))->diff(new DateTime('today'))->y;
 }
 ?>
 
-<div class="bg-white rounded-lg shadow-lg p-6 min-h-screen">
+<div class="w-full max-w-7xl mx-auto">
 
-    <div class="flex flex-col md:flex-row justify-between items-center mb-6 border-b pb-4">
+    <div class="bg-white border border-gray-300 p-4 mb-4 flex justify-between items-center">
         <div>
-            <h2 class="text-2xl font-bold text-gray-800">📂 Cliënten Dossiers</h2>
-            <p class="text-gray-600">Zoek en filter door het cliëntenbestand.</p>
+            <h1 class="text-xl font-bold text-slate-800 uppercase tracking-tight">Cliënten Dossiers</h1>
+            <p class="text-xs text-slate-500">Overzicht en beheer van cliënten</p>
         </div>
-        
         <?php if($_SESSION['role'] === 'management'): ?>
-        <a href="create.php" class="mt-4 md:mt-0 bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded shadow flex items-center">
-            <span class="mr-2">➕</span> Nieuwe Cliënt (Intake)
+        <a href="create.php" class="bg-blue-700 hover:bg-blue-800 text-white text-sm font-medium py-2 px-4 flex items-center transition-colors">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+            Nieuwe Cliënt
         </a>
         <?php endif; ?>
     </div>
 
-    <form method="GET" class="bg-gray-50 p-4 rounded border border-gray-200 mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-        
+    <form method="GET" class="bg-slate-100 border border-gray-300 p-4 mb-6 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
         <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Zoek Naam</label>
-            <input type="text" name="search" value="<?php echo htmlspecialchars($search); ?>" placeholder="bv. Carmen..." class="w-full p-2 border rounded focus:ring-teal-500 focus:border-teal-500">
+            <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Zoeken</label>
+            <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                </div>
+                <input type="text" name="search" value="<?php echo htmlspecialchars($search); ?>" placeholder="Naam..." class="w-full pl-10 p-2 border border-gray-300 text-sm focus:border-blue-500 focus:ring-0">
+            </div>
         </div>
 
         <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">District</label>
-            <select name="district" class="w-full p-2 border rounded bg-white">
-                <option value="">-- Alle Districten --</option>
+            <label class="block text-xs font-bold text-slate-600 uppercase mb-1">District</label>
+            <select name="district" class="w-full p-2 border border-gray-300 text-sm bg-white focus:border-blue-500 focus:ring-0">
+                <option value="">Alle Districten</option>
                 <?php 
                 $districten = ['Paramaribo','Wanica','Commewijne','Para','Saramacca','Marowijne','Coronie','Nickerie','Brokopondo','Sipaliwini'];
-                foreach($districten as $d) {
-                    $selected = ($filter_district == $d) ? 'selected' : '';
-                    echo "<option value='$d' $selected>$d</option>";
-                }
+                foreach($districten as $d) echo "<option value='$d' ".($filter_district == $d ? 'selected' : '').">$d</option>";
                 ?>
             </select>
         </div>
 
         <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Wijk</label>
-            <select name="wijk" class="w-full p-2 border rounded bg-white">
-                <option value="">-- Alle Wijken --</option>
+            <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Wijk</label>
+            <select name="wijk" class="w-full p-2 border border-gray-300 text-sm bg-white focus:border-blue-500 focus:ring-0">
+                <option value="">Alle Wijken</option>
                 <?php 
                 $wijken = ['Centrum','Beekhuizen','Blauwgrond','Flora','Latour','Livorno','Munder','Pontbuiten','Rainville','Tammenga','Weg naar See','Welgelegen','Overig'];
-                foreach($wijken as $w) {
-                    $selected = ($filter_wijk == $w) ? 'selected' : '';
-                    echo "<option value='$w' $selected>$w</option>";
-                }
+                foreach($wijken as $w) echo "<option value='$w' ".($filter_wijk == $w ? 'selected' : '').">$w</option>";
                 ?>
             </select>
         </div>
 
-        <div class="flex items-end space-x-2">
-            <button type="submit" class="bg-blue-600 text-white font-bold py-2 px-4 rounded hover:bg-blue-700 w-full">
-                🔍 Zoek
+        <div class="flex space-x-2">
+            <button type="submit" class="bg-slate-700 hover:bg-slate-800 text-white font-medium py-2 px-6 text-sm flex-1">
+                Filteren
             </button>
-            <a href="index.php" class="bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded hover:bg-gray-400 text-center" title="Filters wissen">
-                ✕
+            <a href="index.php" class="bg-white border border-gray-300 text-slate-700 hover:bg-gray-50 font-medium py-2 px-4 text-sm flex items-center justify-center" title="Reset">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             </a>
         </div>
     </form>
 
-    <div class="overflow-x-auto">
-        <table class="min-w-full bg-white border border-gray-200">
-            <thead class="bg-gray-100 text-gray-600 uppercase text-sm leading-normal">
+    <div class="bg-white border border-gray-300 overflow-x-auto">
+        <table class="min-w-full text-left text-sm">
+            <thead class="bg-slate-50 text-slate-500 border-b border-gray-300 uppercase text-xs">
                 <tr>
-                    <th class="py-3 px-6 text-left">Cliënt</th>
-                    <th class="py-3 px-6 text-left">Leeftijd</th>
-                    <th class="py-3 px-6 text-left">Adres & Wijk</th>
-                    <th class="py-3 px-6 text-left">Type Woning</th>
-                    <th class="py-3 px-6 text-center">Dossier</th>
+                    <th class="px-4 py-3 font-bold w-12">ID</th>
+                    <th class="px-4 py-3 font-bold">Cliëntnaam</th>
+                    <th class="px-4 py-3 font-bold">Leeftijd</th>
+                    <th class="px-4 py-3 font-bold">Adres & Locatie</th>
+                    <th class="px-4 py-3 font-bold">Woonsituatie</th>
+                    <th class="px-4 py-3 font-bold text-right">Actie</th>
                 </tr>
             </thead>
-            <tbody class="text-gray-600 text-sm font-light">
-                
+            <tbody class="divide-y divide-gray-200">
                 <?php if (count($clients) > 0): ?>
                     <?php foreach ($clients as $client): ?>
-                        <tr class="border-b border-gray-200 hover:bg-teal-50 transition duration-150">
+                        <tr class="hover:bg-blue-50/50 transition-colors group">
+                            <td class="px-4 py-3 text-slate-400 font-mono text-xs"><?php echo $client['id']; ?></td>
                             
-                            <td class="py-4 px-6 text-left whitespace-nowrap">
-                                <div class="flex items-center">
-                                    <div class="mr-3 font-bold text-lg text-teal-700 bg-teal-100 h-10 w-10 flex items-center justify-center rounded-full">
-                                        <?php echo substr($client['first_name'], 0, 1) . substr($client['last_name'], 0, 1); ?>
-                                    </div>
-                                    <div>
-                                        <span class="font-bold text-gray-800 text-base">
-                                            <?php echo htmlspecialchars($client['last_name'] . ', ' . $client['first_name']); ?>
-                                        </span>
-                                        <div class="text-xs text-gray-500">
-                                            <?php echo $client['gender'] == 'M' ? 'Man' : 'Vrouw'; ?>
-                                        </div>
-                                    </div>
+                            <td class="px-4 py-3">
+                                <div class="font-bold text-slate-800 text-base">
+                                    <?php echo htmlspecialchars($client['last_name'] . ', ' . $client['first_name']); ?>
+                                </div>
+                                <div class="text-xs text-slate-500 uppercase tracking-wide">
+                                    <?php echo $client['gender'] == 'M' ? 'Man' : 'Vrouw'; ?>
                                 </div>
                             </td>
 
-                            <td class="py-4 px-6 text-left">
-                                <span class="font-semibold text-gray-700 text-base">
-                                    <?php echo calculateAge($client['dob']); ?> jaar
-                                </span>
-                                <div class="text-xs text-gray-400">
-                                    <?php echo date('d-m-Y', strtotime($client['dob'])); ?>
+                            <td class="px-4 py-3">
+                                <span class="text-slate-700"><?php echo calculateAge($client['dob']); ?> jaar</span>
+                                <div class="text-xs text-slate-400"><?php echo date('d-m-Y', strtotime($client['dob'])); ?></div>
+                            </td>
+
+                            <td class="px-4 py-3">
+                                <div class="text-slate-800 font-medium"><?php echo htmlspecialchars($client['address']); ?></div>
+                                <div class="text-xs text-slate-500">
+                                    <?php echo htmlspecialchars($client['neighborhood'] . ', ' . $client['district']); ?>
                                 </div>
                             </td>
 
-                            <td class="py-4 px-6 text-left">
-                                <div class="font-medium text-gray-800"><?php echo htmlspecialchars($client['address']); ?></div>
-                                <div class="flex items-center mt-1">
-                                    <span class="bg-gray-200 text-gray-600 py-1 px-2 rounded text-xs mr-2">
-                                        <?php echo htmlspecialchars($client['neighborhood']); ?>
-                                    </span>
-                                    <span class="text-xs text-gray-400"><?php echo htmlspecialchars($client['district']); ?></span>
-                                </div>
-                            </td>
-
-                            <td class="py-4 px-6 text-left">
+                            <td class="px-4 py-3">
                                 <?php 
-                                    $bg = 'bg-gray-100 text-gray-600';
-                                    if($client['housing_type'] == 'Zorginstelling') $bg = 'bg-orange-100 text-orange-600';
-                                    if($client['housing_type'] == 'Appartement') $bg = 'bg-blue-100 text-blue-600';
-                                    if($client['housing_type'] == 'Woonhuis') $bg = 'bg-green-100 text-green-600';
+                                    $bg = 'bg-gray-100 text-gray-700 border-gray-200';
+                                    if($client['housing_type'] == 'Zorginstelling') $bg = 'bg-orange-50 text-orange-800 border-orange-200';
+                                    if($client['housing_type'] == 'Woonhuis') $bg = 'bg-green-50 text-green-800 border-green-200';
                                 ?>
-                                <span class="<?php echo $bg; ?> py-1 px-3 rounded-full text-xs font-bold border border-opacity-20">
+                                <span class="<?php echo $bg; ?> border px-2 py-0.5 text-xs font-bold uppercase tracking-wide">
                                     <?php echo htmlspecialchars($client['housing_type']); ?>
                                 </span>
-                                <div class="text-xs text-gray-400 mt-1 pl-1">
-                                    <?php echo htmlspecialchars($client['floor_level']); ?>
-                                </div>
                             </td>
 
-                            <td class="py-4 px-6 text-center">
-                                <a href="detail.php?id=<?php echo $client['id']; ?>" class="bg-teal-600 text-white py-2 px-4 rounded hover:bg-teal-700 font-bold shadow transition transform hover:scale-105 flex items-center justify-center">
-                                    Open Dossier ➝
+                            <td class="px-4 py-3 text-right">
+                                <a href="detail.php?id=<?php echo $client['id']; ?>" class="inline-flex items-center text-blue-600 hover:text-blue-800 font-bold text-xs uppercase tracking-wide border border-transparent hover:border-blue-200 px-3 py-1 transition-all">
+                                    Dossier
+                                    <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
                                 </a>
                             </td>
-
                         </tr>
                     <?php endforeach; ?>
                 <?php else: ?>
                     <tr>
-                        <td colspan="5" class="py-8 text-center text-gray-500">
-                            <span class="text-4xl block mb-2">🔍</span>
-                            Geen cliënten gevonden met deze filters.
+                        <td colspan="6" class="px-6 py-8 text-center text-slate-500 italic">
+                            Geen resultaten gevonden voor deze filters.
                         </td>
                     </tr>
                 <?php endif; ?>
