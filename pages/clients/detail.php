@@ -50,18 +50,22 @@ try {
 
     // D. ZORGPLAN: TAKEN & MEDICIJNEN
     
-    // 1. Bibliotheek (Dropdown)
+    // 1. Bibliotheek Taken (Dropdown)
     $lib_stmt = $pdo->query("SELECT * FROM task_library ORDER BY category, title");
     $library_tasks = $lib_stmt->fetchAll();
 
-    // 2. Zorgtaken (Rooster)
+    // 2. Bibliotheek Medicijnen (Voor autocomplete)
+    $med_lib_stmt = $pdo->query("SELECT name, standard_dosage FROM medication_library ORDER BY name");
+    $med_library = $med_lib_stmt->fetchAll();
+
+    // 3. Zorgtaken (Rooster)
     $plan_stmt = $pdo->prepare("SELECT * FROM client_care_tasks 
                                 WHERE client_id = ? AND is_active = 1 
                                 ORDER BY FIELD(time_of_day, 'Ochtend', 'Middag', 'Avond', 'Nacht', 'Hele dag'), title");
     $plan_stmt->execute([$client_id]);
     $care_plan = $plan_stmt->fetchAll();
 
-    // 3. Medicatielijst (NIEUW)
+    // 4. Medicatielijst Cliënt
     $med_stmt = $pdo->prepare("SELECT * FROM client_medications WHERE client_id = ? ORDER BY times");
     $med_stmt->execute([$client_id]);
     $medications = $med_stmt->fetchAll();
@@ -277,13 +281,22 @@ try {
                         <p class="text-gray-500 italic p-2">Geen medicatie geregistreerd.</p>
                     <?php endif; ?>
                 </div>
+                
                 <?php if($_SESSION['role'] !== 'familie'): ?>
                 <div class="bg-gray-50 p-4 rounded border border-gray-200">
                     <h4 class="font-bold text-gray-700 mb-2 text-sm">+ Nieuw Medicijn</h4>
                     <form action="save_medication.php" method="POST">
                         <input type="hidden" name="action" value="add"><input type="hidden" name="client_id" value="<?php echo $client_id; ?>">
+                        
                         <div class="grid grid-cols-2 gap-2 mb-2">
-                            <input type="text" name="name" placeholder="Naam" class="p-2 border rounded text-sm w-full" required>
+                            <div>
+                                <input type="text" list="medList" name="name" placeholder="Zoek medicijn..." class="p-2 border rounded text-sm w-full font-semibold" autocomplete="off" required>
+                                <datalist id="medList">
+                                    <?php foreach($med_library as $ml): ?>
+                                        <option value="<?php echo htmlspecialchars($ml['name']); ?>">
+                                    <?php endforeach; ?>
+                                </datalist>
+                            </div>
                             <input type="text" name="dosage" placeholder="Sterkte" class="p-2 border rounded text-sm w-full">
                         </div>
                         <div class="grid grid-cols-2 gap-2 mb-2">
