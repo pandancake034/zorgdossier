@@ -5,9 +5,8 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// BEVEILIGING: Check of gebruiker is ingelogd
+// BEVEILIGING
 if (!isset($_SESSION['user_id'])) {
-    // Als we niet inloggen zijn, stuur naar login.
     header("Location: /zorgdossier/login.php");
     exit;
 }
@@ -15,7 +14,7 @@ if (!isset($_SESSION['user_id'])) {
 $role = $_SESSION['role'];
 $username = $_SESSION['username'];
 
-// SLIMME PADEN TRUC
+// SLIMME PADEN
 $script_name = $_SERVER['SCRIPT_NAME'];
 $depth = substr_count($script_name, '/') - 2; 
 $base_path = str_repeat('../', max(0, $depth)); 
@@ -25,68 +24,67 @@ $base_path = str_repeat('../', max(0, $depth));
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zorgdossier Suriname</title>
+    <title>Zorgdossier ERP</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Extra animatie voor menu items */
-        .nav-link:hover { text-decoration: underline; text-underline-offset: 4px; }
+        /* Enterprise Font Stack */
+        body { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+        
+        /* Navigatie Link Stijl */
+        .nav-item {
+            padding: 0.75rem 1rem;
+            color: #cbd5e1; /* Slate-300 */
+            text-decoration: none;
+            font-size: 0.875rem; /* 14px */
+            border-right: 1px solid #334155; /* Slate-700 separator */
+            transition: background-color 0.2s, color 0.2s;
+        }
+        .nav-item:hover {
+            background-color: #1e293b; /* Slate-800 */
+            color: #ffffff;
+        }
+        .nav-item.active {
+            background-color: #0f172a; /* Slate-900 */
+            color: #ffffff;
+            border-bottom: 2px solid #3b82f6; /* Blue-500 indicator */
+        }
     </style>
 </head>
-<body class="bg-gray-100 font-sans leading-normal tracking-normal flex flex-col min-h-screen">
+<body class="bg-gray-100 text-slate-800 text-sm flex flex-col min-h-screen">
 
-    <nav class="bg-teal-700 p-4 shadow-md text-white">
-        <div class="container mx-auto flex flex-wrap items-center justify-between">
+    <nav class="bg-slate-700 shadow-sm border-b border-slate-800">
+        <div class="w-full flex flex-wrap items-center justify-between px-4">
             
-            <a href="<?php echo $base_path; ?>dashboard.php" class="flex items-center text-white no-underline hover:text-teal-200 transition">
-                <span class="text-2xl pl-2 font-bold">🏥 Zorgdossier</span>
+            <a href="<?php echo $base_path; ?>dashboard.php" class="flex items-center no-underline mr-6 py-3">
+                <span class="text-lg font-semibold text-white tracking-tight uppercase">Zorgdossier<span class="text-blue-400">ERP</span></span>
             </a>
 
-            <div class="w-full block flex-grow lg:flex lg:items-center lg:w-auto hidden md:block pt-6 lg:pt-0">
-                <ul class="list-reset lg:flex justify-end flex-1 items-center space-x-6 text-sm font-bold">
-                    
-                    <li>
-                        <a class="nav-link text-teal-100 hover:text-white" href="<?php echo $base_path; ?>dashboard.php">Dashboard</a>
-                    </li>
+            <div class="flex-grow flex items-center overflow-x-auto">
+                <a class="nav-item" href="<?php echo $base_path; ?>dashboard.php">Dashboard</a>
 
-                    <?php if ($role === 'management'): ?>
-                        <li>
-                            <a class="nav-link text-teal-100 hover:text-white" href="<?php echo $base_path; ?>pages/clients/index.php">Cliënten</a>
-                        </li>
-                        <li>
-                            <a class="nav-link text-teal-100 hover:text-white" href="<?php echo $base_path; ?>pages/users/index.php">HR & Personeel</a>
-                        </li>
-                        <li>
-                            <a class="nav-link text-teal-100 hover:text-white" href="<?php echo $base_path; ?>pages/planning/roster.php">Rooster & Routes</a>
-                        </li>
-                        <li>
-                            <a class="nav-link text-teal-100 hover:text-white" href="<?php echo $base_path; ?>pages/planning/manage_orders.php">Bestellingen</a>
-                        </li>
-                    <?php endif; ?>
+                <?php if ($role === 'management'): ?>
+                    <a class="nav-item" href="<?php echo $base_path; ?>pages/clients/index.php">Cliënten</a>
+                    <a class="nav-item" href="<?php echo $base_path; ?>pages/users/index.php">HR & Personeel</a>
+                    <a class="nav-item" href="<?php echo $base_path; ?>pages/planning/roster.php">Rooster & Routes</a>
+                    <a class="nav-item" href="<?php echo $base_path; ?>pages/planning/manage_orders.php">Inkoop & Orders</a>
+                <?php endif; ?>
 
-                    <?php if ($role === 'zuster'): ?>
-                        <li>
-                            <a class="nav-link text-teal-100 hover:text-white" href="<?php echo $base_path; ?>pages/planning/view.php">🚑 Mijn Route</a>
-                        </li>
-                        <li>
-                            <a class="nav-link text-teal-100 hover:text-white" href="<?php echo $base_path; ?>pages/clients/index.php">Cliëntenlijst</a>
-                        </li>
-                    <?php endif; ?>
+                <?php if ($role === 'zuster'): ?>
+                    <a class="nav-item" href="<?php echo $base_path; ?>pages/planning/view.php">Mijn route</a>
+                    <a class="nav-item" href="<?php echo $base_path; ?>pages/clients/index.php">Cliëntenlijst</a>
+                <?php endif; ?>
 
-                    <?php if ($role === 'familie'): ?>
-                        <li>
-                            <a class="nav-link text-teal-100 hover:text-white" href="<?php echo $base_path; ?>pages/clients/index.php">Mijn Familie</a>
-                        </li>
-                    <?php endif; ?>
-
-                </ul>
+                <?php if ($role === 'familie'): ?>
+                    <a class="nav-item" href="<?php echo $base_path; ?>pages/clients/index.php">Mijn familie</a>
+                <?php endif; ?>
             </div>
 
-            <div class="ml-6 pl-6 border-l border-teal-500 flex items-center space-x-4">
-                <div class="text-right leading-tight">
-                    <span class="block text-xs text-teal-300">Ingelogd als</span>
-                    <span class="font-bold"><?php echo htmlspecialchars($username); ?></span>
+            <div class="flex items-center pl-4 border-l border-slate-600 ml-auto">
+                <div class="text-right mr-4 leading-tight">
+                    <div class="text-xs text-slate-300">Ingelogd als</div>
+                    <div class="text-xs font-bold text-white"><?php echo htmlspecialchars($username); ?></div>
                 </div>
-                <a href="<?php echo $base_path; ?>logout.php" class="bg-teal-800 hover:bg-teal-900 text-white text-xs py-2 px-3 rounded shadow">
+                <a href="<?php echo $base_path; ?>logout.php" class="bg-slate-600 hover:bg-red-700 text-white text-xs py-1 px-3 border border-slate-500 hover:border-red-800 transition uppercase font-semibold tracking-wider">
                     Uitloggen
                 </a>
             </div>
@@ -94,4 +92,4 @@ $base_path = str_repeat('../', max(0, $depth));
         </div>
     </nav>
     
-    <div class="container mx-auto mt-8 px-4 flex-grow">
+    <div class="w-full max-w-7xl mx-auto mt-6 px-4 flex-grow">
