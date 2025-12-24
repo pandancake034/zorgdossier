@@ -3,25 +3,27 @@
 include '../../includes/header.php';
 require '../../config/db.php';
 
-// 1. CHECK ID
+// 1. BEVEILIGING & ID CHECK
 if (!isset($_GET['id'])) {
     echo "<script>window.location.href='index.php';</script>";
     exit;
 }
 $client_id = $_GET['id'];
 
+// Helper functie voor leeftijd
 function calculateAge($dob) {
     return (new DateTime($dob))->diff(new DateTime('today'))->y;
 }
 
 try {
-    // A. BASIS DATA
+    // A. BASISGEGEVENS CLIËNT
     $stmt = $pdo->prepare("SELECT * FROM clients WHERE id = ?");
     $stmt->execute([$client_id]);
     $client = $stmt->fetch();
+
     if (!$client) die("Cliënt niet gevonden.");
 
-    // B. LABELS
+    // B. LIJSTEN OPHALEN (Allergieën & Hulpmiddelen)
     $stmt = $pdo->prepare("SELECT allergy_type FROM client_allergies WHERE client_id = ?");
     $stmt->execute([$client_id]);
     $allergies = $stmt->fetchAll(PDO::FETCH_COLUMN);
@@ -30,31 +32,42 @@ try {
     $stmt->execute([$client_id]);
     $aids = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-    // C. RAPPORTAGES
+    // C. RAPPORTAGES OPHALEN
     $report_sql = "SELECT r.*, u.username, u.role as author_role, np.first_name, np.last_name 
                    FROM client_reports r 
                    JOIN users u ON r.author_id = u.id 
                    LEFT JOIN nurse_profiles np ON u.id = np.user_id 
                    WHERE r.client_id = ?";
+
     if ($_SESSION['role'] === 'familie') {
         $report_sql .= " AND r.visible_to_family = 1";
     }
     $report_sql .= " ORDER BY r.created_at DESC";
+
     $stmt = $pdo->prepare($report_sql);
     $stmt->execute([$client_id]);
     $reports = $stmt->fetchAll();
 
-    // D. ZORGPLAN
+    // D. ZORGPLAN: TAKEN & MEDICIJNEN
+    
+    // 1. Bibliotheek (Dropdown)
     $lib_stmt = $pdo->query("SELECT * FROM task_library ORDER BY category, title");
     $library_tasks = $lib_stmt->fetchAll();
 
+    // 2. Zorgtaken (Rooster)
     $plan_stmt = $pdo->prepare("SELECT * FROM client_care_tasks 
                                 WHERE client_id = ? AND is_active = 1 
                                 ORDER BY FIELD(time_of_day, 'Ochtend', 'Middag', 'Avond', 'Nacht', 'Hele dag'), title");
     $plan_stmt->execute([$client_id]);
     $care_plan = $plan_stmt->fetchAll();
 
-    // E. METINGEN
+    // 3. Medicatielijst (NIEUW)
+    $med_stmt = $pdo->prepare("SELECT * FROM client_medications WHERE client_id = ? ORDER BY times");
+    $med_stmt->execute([$client_id]);
+    $medications = $med_stmt->fetchAll();
+
+
+    // E. METINGEN OPHALEN
     $obs_stmt = $pdo->prepare("SELECT do.*, u.username, np.first_name 
                                FROM daily_observations do
                                JOIN users u ON do.nurse_id = u.id
@@ -64,12 +77,10 @@ try {
     $obs_stmt->execute([$client_id]);
     $observations = $obs_stmt->fetchAll();
 
-    // F. BESTELLINGEN (NIEUW!)
-    // Producten voor dropdown
+    // F. BESTELLINGEN OPHALEN
     $prod_stmt = $pdo->query("SELECT * FROM products ORDER BY category, name");
     $products = $prod_stmt->fetchAll();
 
-    // Bestelgeschiedenis
     $order_stmt = $pdo->prepare("SELECT o.*, p.name as product_name, oi.quantity, u.username, np.first_name 
                                  FROM orders o
                                  JOIN order_items oi ON o.id = oi.order_id
@@ -97,26 +108,44 @@ try {
 
     <div class="bg-white rounded-lg shadow-lg overflow-hidden mb-6">
         <div class="bg-teal-700 p-6 md:p-8 text-white flex flex-col md:flex-row items-center md:items-start space-y-4 md:space-y-0 md:space-x-6">
+            
             <div class="h-24 w-24 md:h-32 md:w-32 bg-white rounded-full flex items-center justify-center text-teal-700 text-4xl font-bold shadow-lg border-4 border-teal-200">
                 <?php echo substr($client['first_name'], 0, 1) . substr($client['last_name'], 0, 1); ?>
             </div>
+
             <div class="flex-1 text-center md:text-left">
                 <h1 class="text-3xl font-bold"><?php echo htmlspecialchars($client['first_name'] . ' ' . $client['last_name']); ?></h1>
-                <p class="text-teal-200 text-lg"><?php echo calculateAge($client['dob']); ?> jaar • <?php echo date('d-m-Y', strtotime($client['dob'])); ?></p>
+                <p class="text-teal-200 text-lg">
+                    <?php echo calculateAge($client['dob']); ?> jaar • <?php echo date('d-m-Y', strtotime($client['dob'])); ?>
+                </p>
+                
                 <div class="mt-4 flex flex-wrap justify-center md:justify-start gap-2">
                     <?php if($client['diabetes_type'] !== 'Geen'): ?>
-                        <span class="bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold shadow-sm">🩸 Diabetes <?php echo htmlspecialchars($client['diabetes_type']); ?></span>
+                        <span class="bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold shadow-sm">
+                            🩸 Diabetes <?php echo htmlspecialchars($client['diabetes_type']); ?>
+                        </span>
                     <?php endif; ?>
+
                     <?php foreach($allergies as $allergy): ?>
-                        <span class="bg-orange-500 text-white px-3 py-1 rounded-full text-sm font-bold shadow-sm">⚠️ <?php echo htmlspecialchars($allergy); ?></span>
+                        <span class="bg-orange-500 text-white px-3 py-1 rounded-full text-sm font-bold shadow-sm">
+                            ⚠️ <?php echo htmlspecialchars($allergy); ?>
+                        </span>
                     <?php endforeach; ?>
+
                     <?php foreach($aids as $aid): ?>
-                        <span class="bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-bold shadow-sm">♿ <?php echo htmlspecialchars($aid); ?></span>
+                        <span class="bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-bold shadow-sm">
+                            ♿ <?php echo htmlspecialchars($aid); ?>
+                        </span>
                     <?php endforeach; ?>
                 </div>
             </div>
+
             <?php if($_SESSION['role'] === 'management'): ?>
-                <div><a href="edit.php?id=<?php echo $client_id; ?>" class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded shadow font-bold text-sm flex items-center">✏️ Wijzig</a></div>
+                <div>
+                    <a href="edit.php?id=<?php echo $client_id; ?>" class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded shadow font-bold text-sm flex items-center">
+                        ✏️ Wijzig
+                    </a>
+                </div>
             <?php endif; ?>
         </div>
 
@@ -137,8 +166,9 @@ try {
                     <h4 class="font-bold text-teal-700 mb-3">🏠 Woonsituatie</h4>
                     <ul class="space-y-3 text-sm text-gray-700">
                         <li class="flex justify-between border-b pb-1"><span class="text-gray-500">Adres:</span><span class="font-medium text-right"><?php echo htmlspecialchars($client['address']); ?></span></li>
-                        <li class="flex justify-between border-b pb-1"><span class="text-gray-500">Wijk:</span><span class="font-medium text-right"><?php echo htmlspecialchars($client['neighborhood']); ?></span></li>
-                        <li class="flex justify-between border-b pb-1"><span class="text-gray-500">Woning:</span><span class="font-medium text-right"><?php echo htmlspecialchars($client['housing_type']); ?> (<?php echo htmlspecialchars($client['floor_level']); ?>)</span></li>
+                        <li class="flex justify-between border-b pb-1"><span class="text-gray-500">Wijk:</span><span class="font-medium text-right"><?php echo htmlspecialchars($client['neighborhood'] . ', ' . $client['district']); ?></span></li>
+                        <li class="flex justify-between border-b pb-1"><span class="text-gray-500">Type Woning:</span><span class="font-medium text-right"><?php echo htmlspecialchars($client['housing_type']); ?> (<?php echo htmlspecialchars($client['floor_level']); ?>)</span></li>
+                        <li class="flex justify-between"><span class="text-gray-500">Parkeren:</span><span class="font-medium text-right"><?php echo htmlspecialchars($client['parking_info']); ?></span></li>
                     </ul>
                 </div>
             </div>
@@ -148,8 +178,11 @@ try {
                     <h4 class="font-bold text-gray-800 mb-2">👤 <?php echo htmlspecialchars($client['contact1_name']); ?></h4>
                     <p class="text-gray-600 text-sm">📞 <?php echo htmlspecialchars($client['contact1_phone']); ?></p>
                 </div>
-                <div class="bg-yellow-50 p-3 rounded border border-yellow-200 text-sm italic">
-                    <?php echo !empty($client['notes']) ? nl2br(htmlspecialchars($client['notes'])) : 'Geen bijzonderheden.'; ?>
+                <div>
+                    <h4 class="font-bold text-gray-700 mb-2">📝 Bijzonderheden</h4>
+                    <div class="bg-yellow-50 p-3 rounded border border-yellow-200 text-sm text-gray-700 italic">
+                        <?php echo !empty($client['notes']) ? nl2br(htmlspecialchars($client['notes'])) : 'Geen bijzonderheden.'; ?>
+                    </div>
                 </div>
             </div>
         </div>
@@ -165,7 +198,7 @@ try {
                         <input type="hidden" name="client_id" value="<?php echo $client_id; ?>">
                         <div class="mb-3">
                             <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Type</label>
-                            <select name="report_type" class="w-full p-2 border rounded text-sm"><option value="Algemeen">Algemeen</option><option value="Medisch">Medisch</option><option value="Incident">Incident</option></select>
+                            <select name="report_type" class="w-full p-2 border rounded text-sm"><option value="Algemeen">Algemeen</option><option value="Medisch">Medisch</option><option value="Incident">⚠️ Incident</option></select>
                         </div>
                         <div class="mb-3">
                             <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Stemming</label>
@@ -185,8 +218,9 @@ try {
                 </div>
             </div>
             <?php endif; ?>
+            
             <div class="<?php echo ($_SESSION['role'] === 'familie') ? 'lg:col-span-3' : 'lg:col-span-2'; ?>">
-                <h3 class="font-bold text-gray-700 mb-6">📅 Tijdlijn</h3>
+                <h3 class="font-bold text-gray-700 mb-6">📅 Tijdlijn Rapportages</h3>
                 <?php if(count($reports) > 0): ?>
                     <div class="relative border-l-2 border-gray-300 ml-4 space-y-8">
                         <?php foreach($reports as $report): 
@@ -214,16 +248,68 @@ try {
     </div>
 
     <div id="zorgplan" class="tab-content bg-gray-50 rounded-lg shadow p-6">
+        
+        <div class="mb-8 bg-white border-l-4 border-red-500 rounded shadow-sm overflow-hidden">
+            <div class="bg-red-50 p-4 border-b border-red-100">
+                <h3 class="font-bold text-red-800 flex items-center">💊 Medicatielijst (Toedienlijst)</h3>
+            </div>
+            
+            <div class="p-4 grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-2">
+                    <?php if(count($medications) > 0): ?>
+                        <table class="min-w-full text-sm text-left">
+                            <thead class="bg-gray-100 text-gray-600"><tr><th class="p-2">Medicijn</th><th class="p-2">Sterkte</th><th class="p-2">Tijden</th><th class="p-2">Nota</th><th></th></tr></thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <?php foreach($medications as $med): ?>
+                                    <tr class="hover:bg-red-50">
+                                        <td class="p-2 font-bold"><?php echo htmlspecialchars($med['name']); ?></td>
+                                        <td class="p-2"><?php echo htmlspecialchars($med['dosage']); ?></td>
+                                        <td class="p-2"><span class="bg-red-100 text-red-800 px-2 py-1 rounded text-xs font-bold"><?php echo htmlspecialchars($med['times']); ?></span></td>
+                                        <td class="p-2 italic text-gray-500"><?php echo htmlspecialchars($med['notes']); ?></td>
+                                        <?php if($_SESSION['role'] !== 'familie'): ?>
+                                        <td class="p-2 text-right"><a href="save_medication.php?action=delete&delete_id=<?php echo $med['id']; ?>&client_id=<?php echo $client_id; ?>" class="text-red-400 hover:text-red-600 font-bold" onclick="return confirm('Verwijderen?');">×</a></td>
+                                        <?php endif; ?>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    <?php else: ?>
+                        <p class="text-gray-500 italic p-2">Geen medicatie geregistreerd.</p>
+                    <?php endif; ?>
+                </div>
+                <?php if($_SESSION['role'] !== 'familie'): ?>
+                <div class="bg-gray-50 p-4 rounded border border-gray-200">
+                    <h4 class="font-bold text-gray-700 mb-2 text-sm">+ Nieuw Medicijn</h4>
+                    <form action="save_medication.php" method="POST">
+                        <input type="hidden" name="action" value="add"><input type="hidden" name="client_id" value="<?php echo $client_id; ?>">
+                        <div class="grid grid-cols-2 gap-2 mb-2">
+                            <input type="text" name="name" placeholder="Naam" class="p-2 border rounded text-sm w-full" required>
+                            <input type="text" name="dosage" placeholder="Sterkte" class="p-2 border rounded text-sm w-full">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 mb-2">
+                            <input type="text" name="frequency" placeholder="Freq" class="p-2 border rounded text-sm w-full">
+                            <input type="text" name="times" placeholder="Tijd (08:00)" class="p-2 border rounded text-sm w-full">
+                        </div>
+                        <input type="text" name="notes" placeholder="Bijzonderheden" class="p-2 border rounded text-sm w-full mb-2">
+                        <button type="submit" class="bg-red-600 hover:bg-red-700 text-white text-sm font-bold py-1 px-3 rounded w-full">Toevoegen</button>
+                    </form>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <hr class="border-gray-200 mb-8">
+
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <?php if($_SESSION['role'] !== 'familie'): ?>
             <div class="lg:col-span-1">
                 <div class="bg-white p-5 rounded-lg shadow border border-purple-100 sticky top-4">
-                    <h3 class="font-bold text-purple-700 mb-4">📅 Taak Inplannen</h3>
+                    <h3 class="font-bold text-purple-700 mb-4">📅 Zorgtaak Inplannen</h3>
                     <form action="save_task.php" method="POST">
                         <input type="hidden" name="client_id" value="<?php echo $client_id; ?>">
                         <div class="mb-3">
                             <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Bibliotheek</label>
-                            <select id="libSelect" class="w-full p-2 border rounded text-sm" onchange="fillTaskInfo()">
+                            <select id="libSelect" class="w-full p-2 border rounded text-sm bg-gray-50" onchange="fillTaskInfo()">
                                 <option value="">-- Kies taak --</option>
                                 <?php foreach($library_tasks as $lt): ?>
                                     <option value="<?php echo htmlspecialchars($lt['title']); ?>" data-desc="<?php echo htmlspecialchars($lt['default_description']); ?>"><?php echo htmlspecialchars($lt['title']); ?></option>
@@ -232,8 +318,11 @@ try {
                         </div>
                         <input type="text" name="title" id="taskTitle" class="w-full p-2 border rounded mb-3" placeholder="Titel" required>
                         <textarea name="description" id="taskDesc" rows="2" class="w-full p-2 border rounded mb-3" placeholder="Instructie"></textarea>
-                        <select name="time_of_day" class="w-full p-2 border rounded mb-3"><option value="Ochtend">🌅 Ochtend</option><option value="Middag">☀️ Middag</option><option value="Avond">🌙 Avond</option></select>
+                        <select name="time_of_day" class="w-full p-2 border rounded mb-3"><option value="Ochtend">🌅 Ochtend</option><option value="Middag">☀️ Middag</option><option value="Avond">🌙 Avond</option><option value="Nacht">🌑 Nacht</option></select>
                         <select name="frequency" class="w-full p-2 border rounded mb-3"><option value="Dagelijks">Dagelijks</option><option value="Wekelijks">Wekelijks</option></select>
+                        <div class="grid grid-cols-4 gap-2 text-sm mb-3">
+                            <label><input type="checkbox" name="days[]" value="Ma" class="mr-1">Ma</label><label><input type="checkbox" name="days[]" value="Di" class="mr-1">Di</label><label><input type="checkbox" name="days[]" value="Wo" class="mr-1">Wo</label><label><input type="checkbox" name="days[]" value="Do" class="mr-1">Do</label><label><input type="checkbox" name="days[]" value="Vr" class="mr-1">Vr</label><label><input type="checkbox" name="days[]" value="Za" class="mr-1">Za</label><label><input type="checkbox" name="days[]" value="Zo" class="mr-1">Zo</label>
+                        </div>
                         <button type="submit" class="w-full bg-purple-600 text-white font-bold py-2 px-4 rounded hover:bg-purple-700">Opslaan</button>
                     </form>
                     <script>
