@@ -8,7 +8,6 @@ if (session_status() === PHP_SESSION_NONE) {
 // BEVEILIGING: Check of gebruiker is ingelogd
 if (!isset($_SESSION['user_id'])) {
     // Als we niet inloggen zijn, stuur naar login.
-    // We gokken het pad, of gebruiken een harde redirect als het bestand in root staat.
     header("Location: /zorgdossier/login.php");
     exit;
 }
@@ -17,13 +16,9 @@ $role = $_SESSION['role'];
 $username = $_SESSION['username'];
 
 // SLIMME PADEN TRUC
-// We kijken hoe diep we zitten (tellen het aantal slashes in het pad)
-// Zo weten we of we 'pages/...' moeten gebruiken of '../'
 $script_name = $_SERVER['SCRIPT_NAME'];
-$depth = substr_count($script_name, '/') - 2; // -2 omdat we localhost/zorgdossier niet meetellen
+$depth = substr_count($script_name, '/') - 2; 
 $base_path = str_repeat('../', max(0, $depth)); 
-// $base_path is nu leeg "" op dashboard, of "../../" als je diep zit.
-
 ?>
 <!DOCTYPE html>
 <html lang="nl">
@@ -61,7 +56,7 @@ $base_path = str_repeat('../', max(0, $depth));
                             <a class="nav-link text-teal-100 hover:text-white" href="<?php echo $base_path; ?>pages/users/index.php">HR & Personeel</a>
                         </li>
                         <li>
-                            <a class="nav-link text-teal-100 hover:text-white" href="<?php echo $base_path; ?>pages/planning/manage.php">Rooster & Routes</a>
+                            <a class="nav-link text-teal-100 hover:text-white" href="<?php echo $base_path; ?>pages/planning/roster.php">Rooster & Routes</a>
                         </li>
                         <li>
                             <a class="nav-link text-teal-100 hover:text-white" href="<?php echo $base_path; ?>pages/planning/manage_orders.php">Bestellingen</a>
