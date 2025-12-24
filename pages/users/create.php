@@ -16,26 +16,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // 1. BASIS USER AANMAKEN (Tabel: users)
         $username = $_POST['username'];
+        // We voegen een 'dummy' email toe als het veld leeg is, of gebruiken de invoer
+        // Dit voorkomt de error als je het leeg laat.
+        $email = !empty($_POST['email']) ? $_POST['email'] : $username . '@zorgdossier.sr'; 
+        
         $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
         $role = $_POST['role'];
 
-        $stmt = $pdo->prepare("INSERT INTO users (username, password, role) VALUES (?, ?, ?)");
-        $stmt->execute([$username, $password, $role]);
+        // HIER WAS DE FOUT: We voegen nu 'email' toe aan de query
+        $stmt = $pdo->prepare("INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, ?)");
+        $stmt->execute([$username, $password, $email, $role]);
         $user_id = $pdo->lastInsertId();
 
         // 2. ZUSTER PROFIEL AANMAKEN (Tabel: nurse_profiles)
-        // Alleen als de rol 'zuster' is
         if ($role === 'zuster') {
             
-            // Decimalen en Integers veilig maken (voorkomt die SQL error)
-            // Als het leeg is, maken we er 0 of NULL van.
+            // Veilige variabelen maken (0.00 als het leeg is)
             $contract_hours = !empty($_POST['contract_hours']) ? $_POST['contract_hours'] : 0;
             $hourly_wage = !empty($_POST['hourly_wage']) ? $_POST['hourly_wage'] : 0.00;
             $travel_allowance = !empty($_POST['travel_allowance']) ? $_POST['travel_allowance'] : 0.00;
-            $has_car = isset($_POST['has_car']) ? 1 : 0; // Checkbox
+            $has_car = isset($_POST['has_car']) ? 1 : 0;
             $date_employed = !empty($_POST['date_employed']) ? $_POST['date_employed'] : date('Y-m-d');
 
-            // De query die PRECIES matcht met jouw database structuur
             $sql_profile = "INSERT INTO nurse_profiles 
             (user_id, first_name, last_name, gender, dob, address, city, district, neighborhood, phone, 
              job_title, contract_type, date_employed, contract_hours, hourly_wage, travel_allowance, has_car, notes) 
@@ -58,8 +60,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_POST['contract_type'],
                 $date_employed,
                 $contract_hours,
-                $hourly_wage,      // Let op: matcht nu met DB
-                $travel_allowance, // Matcht met DB
+                $hourly_wage,
+                $travel_allowance,
                 $has_car,
                 $_POST['notes']
             ]);
@@ -92,7 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <form method="POST" class="bg-white rounded-lg shadow p-6">
         
         <h3 class="font-bold text-gray-700 border-b pb-2 mb-4">1. Login & Rol</h3>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
                 <label class="block text-xs font-bold text-gray-500 uppercase">Gebruikersnaam</label>
                 <input type="text" name="username" class="w-full p-2 border rounded" required>
@@ -100,6 +102,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div>
                 <label class="block text-xs font-bold text-gray-500 uppercase">Wachtwoord</label>
                 <input type="password" name="password" class="w-full p-2 border rounded" required>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase">Email Adres</label>
+                <input type="email" name="email" class="w-full p-2 border rounded" placeholder="naam@zorginstelling.sr">
             </div>
             <div>
                 <label class="block text-xs font-bold text-gray-500 uppercase">Rol</label>
