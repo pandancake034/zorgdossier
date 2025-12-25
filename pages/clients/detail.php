@@ -9,6 +9,49 @@ if (!isset($_GET['id'])) {
     exit;
 }
 $client_id = $_GET['id'];
+$user_id = $_SESSION['user_id'];
+$user_role = $_SESSION['role'];
+
+// 2. ACTIES VERWERKEN (Verwijderen & Bewerken)
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // A. VERWIJDEREN
+    if (isset($_POST['action']) && $_POST['action'] === 'delete_report') {
+        $report_id = $_POST['report_id'];
+        
+        // Check eigenaarschap of management rol
+        $check = $pdo->prepare("SELECT author_id FROM client_reports WHERE id = ?");
+        $check->execute([$report_id]);
+        $report = $check->fetch();
+
+        if ($report && ($report['author_id'] == $user_id || $user_role === 'management')) {
+            $del = $pdo->prepare("DELETE FROM client_reports WHERE id = ?");
+            $del->execute([$report_id]);
+            // Refresh om form resubmission te voorkomen
+            header("Location: detail.php?id=$client_id#rapportages");
+            exit;
+        }
+    }
+
+    // B. BEWERKEN
+    if (isset($_POST['action']) && $_POST['action'] === 'edit_report') {
+        $report_id = $_POST['report_id'];
+        $content = $_POST['content'];
+        $mood = $_POST['mood'];
+        $type = $_POST['report_type'];
+
+        // Check eigenaarschap of management rol
+        $check = $pdo->prepare("SELECT author_id FROM client_reports WHERE id = ?");
+        $check->execute([$report_id]);
+        $report = $check->fetch();
+
+        if ($report && ($report['author_id'] == $user_id || $user_role === 'management')) {
+            $upd = $pdo->prepare("UPDATE client_reports SET content = ?, mood = ?, report_type = ? WHERE id = ?");
+            $upd->execute([$content, $mood, $type, $report_id]);
+            header("Location: detail.php?id=$client_id#rapportages");
+            exit;
+        }
+    }
+}
 
 // Helper functie voor leeftijd
 function calculateAge($dob) {
@@ -32,7 +75,7 @@ try {
     $stmt->execute([$client_id]);
     $aids = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-    // C. RAPPORTAGES
+    // C. RAPPORTAGES OPHALEN
     $report_sql = "SELECT r.*, u.username, u.role as author_role, np.first_name, np.last_name 
                    FROM client_reports r 
                    JOIN users u ON r.author_id = u.id 
@@ -46,7 +89,7 @@ try {
     $stmt->execute([$client_id]);
     $reports = $stmt->fetchAll();
 
-    // D. ZORGPLAN & BIBLIOTHEKEN
+    // D. OVERIGE DATA (Zorgplan, Metingen, etc.)
     $library_tasks = $pdo->query("SELECT * FROM task_library ORDER BY category, title")->fetchAll();
     $med_library = $pdo->query("SELECT name, standard_dosage FROM medication_library ORDER BY name")->fetchAll();
     
@@ -60,7 +103,6 @@ try {
     $med_stmt->execute([$client_id]);
     $medications = $med_stmt->fetchAll();
 
-    // E. METINGEN
     $obs_stmt = $pdo->prepare("SELECT do.*, u.username, np.first_name 
                                FROM daily_observations do
                                JOIN users u ON do.nurse_id = u.id
@@ -70,7 +112,6 @@ try {
     $obs_stmt->execute([$client_id]);
     $observations = $obs_stmt->fetchAll();
 
-    // F. BESTELLINGEN
     $products = $pdo->query("SELECT * FROM products ORDER BY category, name")->fetchAll();
     $order_stmt = $pdo->prepare("SELECT o.*, p.name as product_name, oi.quantity, u.username, np.first_name 
                                  FROM orders o
@@ -88,7 +129,7 @@ try {
 }
 ?>
 
-<div class="w-full max-w-7xl mx-auto mb-20">
+<div class="w-full max-w-7xl mx-auto mb-20 relative">
 
     <div class="bg-white border border-gray-300 shadow-sm mb-6">
         <div class="p-6 flex flex-col md:flex-row items-start justify-between">
@@ -120,13 +161,11 @@ try {
                                 Diabetes <?php echo htmlspecialchars($client['diabetes_type']); ?>
                             </span>
                         <?php endif; ?>
-
                         <?php foreach($allergies as $allergy): ?>
                             <span class="px-2 py-0.5 bg-orange-50 text-orange-700 border border-orange-200 text-xs font-bold uppercase">
                                 <?php echo htmlspecialchars($allergy); ?>
                             </span>
                         <?php endforeach; ?>
-
                         <?php foreach($aids as $aid): ?>
                             <span class="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold uppercase">
                                 <?php echo htmlspecialchars($aid); ?>
@@ -143,82 +182,84 @@ try {
             <?php endif; ?>
         </div>
 
-        <div class="px-6 border-t border-gray-200 bg-slate-50">
-            <nav class="flex space-x-8 -mb-px" aria-label="Tabs">
-                <button onclick="switchTab('overzicht', this)" class="tab-btn active border-blue-600 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-bold text-sm">
-                    Stamkaart
-                </button>
-                <button onclick="switchTab('rapportages', this)" class="tab-btn border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                    Rapportages
-                </button>
-                <button onclick="switchTab('zorgplan', this)" class="tab-btn border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                    Zorgplan
-                </button>
-                <button onclick="switchTab('metingen', this)" class="tab-btn border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                    Metingen
-                </button>
-                <button onclick="switchTab('bestellingen', this)" class="tab-btn border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                    Materiaal
-                </button>
+        <div class="px-6 border-t border-gray-200 bg-slate-50 overflow-x-auto">
+            <nav class="flex space-x-8 -mb-px min-w-max" aria-label="Tabs">
+                <button onclick="switchTab('overzicht', this)" class="tab-btn active border-blue-600 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-bold text-sm">Stamkaart</button>
+                <button onclick="switchTab('notities', this)" class="tab-btn border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Communicatie (Chat)</button>
+                <button onclick="switchTab('rapportages', this)" class="tab-btn border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Rapportages</button>
+                <button onclick="switchTab('zorgplan', this)" class="tab-btn border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Zorgplan</button>
+                <button onclick="switchTab('metingen', this)" class="tab-btn border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Metingen</button>
+                <button onclick="switchTab('bestellingen', this)" class="tab-btn border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Materiaal</button>
             </nav>
         </div>
     </div>
 
     <div id="overzicht" class="tab-content block">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
             <div class="bg-white border border-gray-300 shadow-sm">
-                <div class="bg-slate-100 px-4 py-2 border-b border-gray-300">
-                    <h3 class="text-xs font-bold text-slate-700 uppercase">Woonsituatie & Adres</h3>
-                </div>
+                <div class="bg-slate-100 px-4 py-2 border-b border-gray-300"><h3 class="text-xs font-bold text-slate-700 uppercase">Woonsituatie & Adres</h3></div>
                 <div class="p-4 space-y-3 text-sm">
-                    <div class="grid grid-cols-3 border-b border-gray-100 pb-2">
-                        <span class="text-slate-500">Adres</span>
-                        <span class="col-span-2 font-medium text-slate-800"><?php echo htmlspecialchars($client['address']); ?></span>
-                    </div>
-                    <div class="grid grid-cols-3 border-b border-gray-100 pb-2">
-                        <span class="text-slate-500">Wijk/District</span>
-                        <span class="col-span-2 font-medium text-slate-800"><?php echo htmlspecialchars($client['neighborhood'] . ', ' . $client['district']); ?></span>
-                    </div>
-                    <div class="grid grid-cols-3 border-b border-gray-100 pb-2">
-                        <span class="text-slate-500">Woning</span>
-                        <span class="col-span-2 font-medium text-slate-800"><?php echo htmlspecialchars($client['housing_type']); ?> (<?php echo htmlspecialchars($client['floor_level']); ?>)</span>
-                    </div>
-                    <div class="grid grid-cols-3">
-                        <span class="text-slate-500">Parkeren</span>
-                        <span class="col-span-2 font-medium text-slate-800"><?php echo htmlspecialchars($client['parking_info']); ?></span>
-                    </div>
+                    <div class="grid grid-cols-3 border-b border-gray-100 pb-2"><span class="text-slate-500">Adres</span><span class="col-span-2 font-medium text-slate-800"><?php echo htmlspecialchars($client['address']); ?></span></div>
+                    <div class="grid grid-cols-3 border-b border-gray-100 pb-2"><span class="text-slate-500">Wijk/District</span><span class="col-span-2 font-medium text-slate-800"><?php echo htmlspecialchars($client['neighborhood'] . ', ' . $client['district']); ?></span></div>
+                    <div class="grid grid-cols-3 border-b border-gray-100 pb-2"><span class="text-slate-500">Woning</span><span class="col-span-2 font-medium text-slate-800"><?php echo htmlspecialchars($client['housing_type']); ?> (<?php echo htmlspecialchars($client['floor_level']); ?>)</span></div>
+                    <div class="grid grid-cols-3"><span class="text-slate-500">Parkeren</span><span class="col-span-2 font-medium text-slate-800"><?php echo htmlspecialchars($client['parking_info']); ?></span></div>
                 </div>
             </div>
-
             <div class="bg-white border border-gray-300 shadow-sm">
-                <div class="bg-slate-100 px-4 py-2 border-b border-gray-300">
-                    <h3 class="text-xs font-bold text-slate-700 uppercase">Contactpersonen</h3>
-                </div>
+                <div class="bg-slate-100 px-4 py-2 border-b border-gray-300"><h3 class="text-xs font-bold text-slate-700 uppercase">Contactpersonen</h3></div>
                 <div class="p-4 space-y-4">
                     <div class="bg-blue-50 border border-blue-100 p-3">
                         <span class="text-[10px] font-bold text-blue-700 uppercase block mb-1">Eerste Contact</span>
                         <div class="font-bold text-slate-800 text-sm"><?php echo htmlspecialchars($client['contact1_name']); ?></div>
-                        <div class="text-slate-600 text-sm flex items-center mt-1">
-                            📞 <?php echo htmlspecialchars($client['contact1_phone']); ?>
-                        </div>
+                        <div class="text-slate-600 text-sm flex items-center mt-1">📞 <?php echo htmlspecialchars($client['contact1_phone']); ?></div>
                     </div>
-                    
                     <?php if(!empty($client['notes'])): ?>
-                    <div>
-                        <span class="text-xs font-bold text-slate-500 uppercase mb-1 block">Bijzonderheden</span>
-                        <div class="text-sm bg-yellow-50 text-slate-700 p-3 border border-yellow-200">
-                            <?php echo nl2br(htmlspecialchars($client['notes'])); ?>
-                        </div>
-                    </div>
+                    <div><span class="text-xs font-bold text-slate-500 uppercase mb-1 block">Bijzonderheden</span><div class="text-sm bg-yellow-50 text-slate-700 p-3 border border-yellow-200"><?php echo nl2br(htmlspecialchars($client['notes'])); ?></div></div>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
     </div>
 
+    <div id="notities" class="tab-content hidden">
+        <div class="bg-slate-50 border border-gray-300 h-[600px] flex flex-col">
+            <div class="bg-slate-100 px-4 py-3 border-b border-gray-300">
+                <h3 class="text-xs font-bold text-slate-700 uppercase">Communicatie & Notities Tijdlijn</h3>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-6 space-y-6">
+                <?php if(count($reports) > 0): foreach($reports as $chat): 
+                    $is_me = ($chat['author_id'] == $user_id);
+                    $align = $is_me ? 'items-end' : 'items-start';
+                    $bg = $is_me ? 'bg-blue-100 border-blue-200' : 'bg-white border-gray-300';
+                    $author_name = $chat['first_name'] ? $chat['first_name'] . ' ' . $chat['last_name'] : $chat['username'];
+                ?>
+                    <div class="flex flex-col <?php echo $align; ?>">
+                        <div class="flex items-end gap-2 <?php echo $is_me ? 'flex-row-reverse' : 'flex-row'; ?>">
+                            <div class="w-8 h-8 bg-slate-300 flex items-center justify-center text-xs font-bold text-slate-600 shrink-0 border border-slate-400">
+                                <?php echo substr($author_name, 0, 1); ?>
+                            </div>
+                            
+                            <div class="max-w-xl <?php echo $bg; ?> border p-3 shadow-sm text-sm text-slate-800">
+                                <div class="flex justify-between items-center mb-1 gap-4 border-b border-black/10 pb-1">
+                                    <span class="font-bold text-xs uppercase text-slate-600"><?php echo htmlspecialchars($author_name); ?></span>
+                                    <span class="text-[10px] text-slate-400"><?php echo date('d-m-Y H:i', strtotime($chat['created_at'])); ?></span>
+                                </div>
+                                <p class="leading-relaxed"><?php echo nl2br(htmlspecialchars($chat['content'])); ?></p>
+                                <div class="mt-2 text-[10px] uppercase font-bold text-slate-400">Type: <?php echo $chat['report_type']; ?></div>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; else: ?>
+                    <div class="text-center text-slate-400 italic mt-10">Start het gesprek of voeg een notitie toe bij 'Rapportages'.</div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
     <div id="rapportages" class="tab-content hidden">
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
             <?php if($_SESSION['role'] !== 'familie'): ?>
             <div class="lg:col-span-1">
                 <div class="bg-white border border-gray-300 shadow-sm p-4 sticky top-4">
@@ -257,14 +298,30 @@ try {
                 <div class="space-y-4">
                     <?php if(count($reports) > 0): foreach($reports as $report): 
                         $border = ($report['report_type'] == 'Incident') ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-blue-500';
+                        $can_edit = ($report['author_id'] == $user_id || $user_role === 'management');
                     ?>
-                    <div class="bg-white border border-gray-300 p-4 <?php echo $border; ?> shadow-sm">
+                    <div class="bg-white border border-gray-300 p-4 <?php echo $border; ?> shadow-sm relative group">
                         <div class="flex justify-between items-start mb-2">
                             <div>
                                 <span class="font-bold text-slate-800 text-sm block"><?php echo $report['report_type']; ?></span>
                                 <span class="text-xs text-slate-400"><?php echo date('d-m-Y H:i', strtotime($report['created_at'])); ?> • <?php echo htmlspecialchars($report['first_name'] ?: $report['username']); ?></span>
                             </div>
-                            <span class="text-xs font-bold uppercase bg-slate-100 px-2 py-1 text-slate-600 border border-gray-200"><?php echo $report['mood']; ?></span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-bold uppercase bg-slate-100 px-2 py-1 text-slate-600 border border-gray-200"><?php echo $report['mood']; ?></span>
+                                
+                                <?php if($can_edit): ?>
+                                    <button onclick='openEditModal(<?php echo json_encode($report); ?>)' class="text-slate-400 hover:text-blue-600 p-1" title="Bewerken">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                                    </button>
+                                    <form method="POST" class="inline" onsubmit="return confirm('Weet u zeker dat u deze rapportage wilt verwijderen?');">
+                                        <input type="hidden" name="action" value="delete_report">
+                                        <input type="hidden" name="report_id" value="<?php echo $report['id']; ?>">
+                                        <button type="submit" class="text-slate-400 hover:text-red-600 p-1" title="Verwijderen">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
                         </div>
                         <p class="text-sm text-slate-700 leading-relaxed"><?php echo nl2br(htmlspecialchars($report['content'])); ?></p>
                     </div>
@@ -277,11 +334,8 @@ try {
     </div>
 
     <div id="zorgplan" class="tab-content hidden">
-        
         <div class="bg-white border border-gray-300 shadow-sm mb-8">
-            <div class="bg-slate-100 px-4 py-2 border-b border-gray-300 flex justify-between items-center">
-                <h3 class="text-xs font-bold text-slate-700 uppercase">Medicatie (Toedienlijst)</h3>
-            </div>
+            <div class="bg-slate-100 px-4 py-2 border-b border-gray-300 flex justify-between items-center"><h3 class="text-xs font-bold text-slate-700 uppercase">Medicatie</h3></div>
             <div class="p-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div class="lg:col-span-2 overflow-x-auto">
                      <?php if(count($medications) > 0): ?>
@@ -309,7 +363,6 @@ try {
                         <p class="text-slate-500 italic text-sm">Geen medicatie geregistreerd.</p>
                     <?php endif; ?>
                 </div>
-
                 <?php if($_SESSION['role'] !== 'familie'): ?>
                 <div class="bg-slate-50 border border-gray-200 p-4">
                     <h4 class="font-bold text-slate-700 mb-3 text-xs uppercase border-b border-gray-200 pb-1">Toevoegen</h4>
@@ -331,7 +384,6 @@ try {
                 <?php endif; ?>
             </div>
         </div>
-
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <?php if($_SESSION['role'] !== 'familie'): ?>
             <div class="lg:col-span-1">
@@ -350,54 +402,27 @@ try {
                         </div>
                         <input type="text" name="title" id="taskTitle" class="w-full p-2 border border-gray-300 text-sm mb-3" placeholder="Titel" required>
                         <textarea name="description" id="taskDesc" rows="2" class="w-full p-2 border border-gray-300 text-sm mb-3" placeholder="Instructie"></textarea>
-                        
                         <div class="grid grid-cols-2 gap-3 mb-3">
                             <select name="time_of_day" class="w-full p-2 border border-gray-300 text-sm"><option value="Ochtend">Ochtend</option><option value="Middag">Middag</option><option value="Avond">Avond</option><option value="Nacht">Nacht</option></select>
                             <select name="frequency" class="w-full p-2 border border-gray-300 text-sm"><option value="Dagelijks">Dagelijks</option><option value="Wekelijks">Wekelijks</option></select>
                         </div>
-                        
                         <div class="grid grid-cols-4 gap-2 text-xs mb-4 text-slate-600">
-                            <label><input type="checkbox" name="days[]" value="Ma"> Ma</label>
-                            <label><input type="checkbox" name="days[]" value="Di"> Di</label>
-                            <label><input type="checkbox" name="days[]" value="Wo"> Wo</label>
-                            <label><input type="checkbox" name="days[]" value="Do"> Do</label>
-                            <label><input type="checkbox" name="days[]" value="Vr"> Vr</label>
-                            <label><input type="checkbox" name="days[]" value="Za"> Za</label>
-                            <label><input type="checkbox" name="days[]" value="Zo"> Zo</label>
+                            <label><input type="checkbox" name="days[]" value="Ma"> Ma</label><label><input type="checkbox" name="days[]" value="Di"> Di</label><label><input type="checkbox" name="days[]" value="Wo"> Wo</label><label><input type="checkbox" name="days[]" value="Do"> Do</label><label><input type="checkbox" name="days[]" value="Vr"> Vr</label><label><input type="checkbox" name="days[]" value="Za"> Za</label><label><input type="checkbox" name="days[]" value="Zo"> Zo</label>
                         </div>
                         <button type="submit" class="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-2 text-sm uppercase">Opslaan</button>
                     </form>
-                    <script>
-                        function fillTaskInfo() {
-                            var s = document.getElementById("libSelect");
-                            if(s.value !== "") {
-                                document.getElementById("taskTitle").value = s.value;
-                                document.getElementById("taskDesc").value = s.options[s.selectedIndex].getAttribute("data-desc");
-                            }
-                        }
-                    </script>
+                    <script>function fillTaskInfo() {var s = document.getElementById("libSelect");if(s.value !== "") {document.getElementById("taskTitle").value = s.value;document.getElementById("taskDesc").value = s.options[s.selectedIndex].getAttribute("data-desc");}}</script>
                 </div>
             </div>
             <?php endif; ?>
-
             <div class="<?php echo ($_SESSION['role'] === 'familie') ? 'lg:col-span-3' : 'lg:col-span-2'; ?>">
                 <div class="bg-white border border-gray-300 shadow-sm">
-                    <div class="bg-slate-100 px-4 py-2 border-b border-gray-300">
-                        <h3 class="text-xs font-bold text-slate-700 uppercase">Actueel Zorgplan</h3>
-                    </div>
+                    <div class="bg-slate-100 px-4 py-2 border-b border-gray-300"><h3 class="text-xs font-bold text-slate-700 uppercase">Actueel Zorgplan</h3></div>
                     <div class="p-4">
-                        <?php if(count($care_plan) > 0): 
-                            $curr = ''; 
-                            foreach($care_plan as $t): 
-                                if($t['time_of_day'] != $curr): $curr = $t['time_of_day']; 
-                                    echo "<h4 class='mt-4 mb-2 font-bold text-slate-400 text-xs uppercase border-b border-gray-100'>$curr</h4>"; 
-                                endif;
-                        ?>
+                        <?php if(count($care_plan) > 0): $curr = ''; foreach($care_plan as $t): 
+                                if($t['time_of_day'] != $curr): $curr = $t['time_of_day']; echo "<h4 class='mt-4 mb-2 font-bold text-slate-400 text-xs uppercase border-b border-gray-100'>$curr</h4>"; endif; ?>
                             <div class="bg-white border border-gray-200 p-3 mb-2 hover:bg-slate-50 transition-colors">
-                                <div class="flex justify-between items-start">
-                                    <h5 class="font-bold text-slate-800 text-sm"><?php echo htmlspecialchars($t['title']); ?></h5>
-                                    <span class="text-[10px] bg-blue-50 text-blue-800 px-1.5 py-0.5 border border-blue-200 uppercase font-bold"><?php echo htmlspecialchars($t['frequency']); ?></span>
-                                </div>
+                                <div class="flex justify-between items-start"><h5 class="font-bold text-slate-800 text-sm"><?php echo htmlspecialchars($t['title']); ?></h5><span class="text-[10px] bg-blue-50 text-blue-800 px-1.5 py-0.5 border border-blue-200 uppercase font-bold"><?php echo htmlspecialchars($t['frequency']); ?></span></div>
                                 <p class="text-xs text-slate-600 mt-1"><?php echo htmlspecialchars($t['description']); ?></p>
                             </div>
                         <?php endforeach; else: echo "<p class='text-slate-500 italic text-sm'>Geen taken ingepland.</p>"; endif; ?>
@@ -407,148 +432,73 @@ try {
         </div>
     </div>
 
-    <div id="metingen" class="tab-content hidden">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <?php if($_SESSION['role'] !== 'familie'): ?>
-            <div class="lg:col-span-1">
-                <div class="bg-white border border-gray-300 shadow-sm p-4 sticky top-4">
-                    <h3 class="text-xs font-bold text-slate-700 uppercase mb-4 border-b border-gray-200 pb-2">Dagstaat Invoeren</h3>
-                    <form action="save_observation.php" method="POST">
-                        <input type="hidden" name="client_id" value="<?php echo $client_id; ?>">
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Bloeddruk</label>
-                        <div class="flex gap-2 mb-3">
-                            <input type="number" name="bp_systolic" class="w-1/2 p-2 border border-gray-300 text-sm" placeholder="Sys">
-                            <input type="number" name="bp_diastolic" class="w-1/2 p-2 border border-gray-300 text-sm" placeholder="Dia">
-                        </div>
-                        <div class="grid grid-cols-2 gap-2 mb-3">
-                            <select name="eating" class="p-2 border border-gray-300 text-sm"><option value="Goed">Eten: Goed</option><option value="Slecht">Eten: Slecht</option></select>
-                            <select name="drinking" class="p-2 border border-gray-300 text-sm"><option value="Goed">Drink: Goed</option><option value="Slecht">Drink: Slecht</option></select>
-                        </div>
-                        <div class="mb-3"><select name="defecation" class="w-full p-2 border border-gray-300 text-sm"><option value="Geen">Ontlasting: Geen</option><option value="Normaal">Normaal</option><option value="Obstipatie">Obstipatie</option></select></div>
-                        <textarea name="general_impression" rows="2" class="w-full p-2 border border-gray-300 text-sm mb-3" placeholder="Algemene indruk"></textarea>
-                        <button type="submit" class="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-2 text-sm uppercase">Opslaan</button>
-                    </form>
-                </div>
-            </div>
-            <?php endif; ?>
-            
-            <div class="<?php echo ($_SESSION['role'] === 'familie') ? 'lg:col-span-3' : 'lg:col-span-2'; ?>">
-                <div class="bg-white border border-gray-300 shadow-sm">
-                    <div class="bg-slate-100 px-4 py-2 border-b border-gray-300">
-                        <h3 class="text-xs font-bold text-slate-700 uppercase">Geschiedenis Metingen</h3>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full text-sm text-left">
-                            <thead class="bg-slate-50 text-slate-500 border-b border-gray-200 uppercase text-xs">
-                                <tr><th class="px-4 py-2">Tijd</th><th class="px-4 py-2">RR (Bloeddruk)</th><th class="px-4 py-2">Eten</th><th class="px-4 py-2">Indruk</th></tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-100">
-                                <?php foreach($observations as $obs): ?>
-                                <tr class="hover:bg-slate-50">
-                                    <td class="px-4 py-2 text-slate-600 whitespace-nowrap"><?php echo date('d-m H:i', strtotime($obs['observation_time'])); ?></td>
-                                    <td class="px-4 py-2 font-mono text-blue-800 font-bold"><?php echo $obs['bp_systolic'] ? $obs['bp_systolic'].'/'.$obs['bp_diastolic'] : '-'; ?></td>
-                                    <td class="px-4 py-2 text-slate-700"><?php echo htmlspecialchars($obs['eating']); ?></td>
-                                    <td class="px-4 py-2 text-slate-600 truncate max-w-xs"><?php echo htmlspecialchars($obs['general_impression']); ?></td>
-                                </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div id="bestellingen" class="tab-content hidden">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <?php if($_SESSION['role'] !== 'familie'): ?>
-            <div class="lg:col-span-1">
-                <div class="bg-white border border-gray-300 shadow-sm p-4 sticky top-4">
-                    <h3 class="text-xs font-bold text-slate-700 uppercase mb-4 border-b border-gray-200 pb-2">Materiaal Aanvragen</h3>
-                    <form action="save_order.php" method="POST">
-                        <input type="hidden" name="client_id" value="<?php echo $client_id; ?>">
-                        <div class="mb-3">
-                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Product</label>
-                            <select name="product_id" class="w-full p-2 border border-gray-300 text-sm bg-slate-50" required>
-                                <option value="">-- Kies product --</option>
-                                <?php foreach($products as $prod): ?>
-                                    <option value="<?php echo $prod['id']; ?>"><?php echo htmlspecialchars($prod['name']); ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Aantal</label>
-                            <input type="number" name="quantity" value="1" min="1" class="w-full p-2 border border-gray-300 text-sm" required>
-                        </div>
-                        <button type="submit" class="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-2 text-sm uppercase">Aanvragen</button>
-                    </form>
-                </div>
-            </div>
-            <?php endif; ?>
-            
-            <div class="<?php echo ($_SESSION['role'] === 'familie') ? 'lg:col-span-3' : 'lg:col-span-2'; ?>">
-                <div class="bg-white border border-gray-300 shadow-sm">
-                    <div class="bg-slate-100 px-4 py-2 border-b border-gray-300">
-                        <h3 class="text-xs font-bold text-slate-700 uppercase">Bestelgeschiedenis</h3>
-                    </div>
-                    <div class="p-4 space-y-3">
-                        <?php if(count($orders) > 0): foreach($orders as $ord): 
-                             $status_style = 'bg-yellow-50 text-yellow-800 border-yellow-200';
-                             if($ord['status'] == 'goedgekeurd') $status_style = 'bg-green-50 text-green-800 border-green-200';
-                             if($ord['status'] == 'geweigerd') $status_style = 'bg-red-50 text-red-800 border-red-200';
-                        ?>
-                        <div class="bg-white border border-gray-200 p-3 flex justify-between items-center hover:bg-slate-50">
-                            <div>
-                                <h4 class="font-bold text-slate-800 text-sm"><?php echo htmlspecialchars($ord['product_name']); ?> <span class="text-slate-500 font-normal">x<?php echo $ord['quantity']; ?></span></h4>
-                                <p class="text-xs text-slate-400">Aangevraagd: <?php echo date('d-m-Y', strtotime($ord['order_date'])); ?> door <?php echo htmlspecialchars($ord['first_name']); ?></p>
-                            </div>
-                            <span class="px-2 py-1 text-[10px] font-bold uppercase border <?php echo $status_style; ?>"><?php echo $ord['status']; ?></span>
-                        </div>
-                        <?php endforeach; else: ?>
-                            <p class="text-slate-500 italic text-sm">Nog geen bestellingen.</p>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    <div id="metingen" class="tab-content hidden"><div class="bg-white border border-gray-300 p-6"><p class="text-slate-500">Metingen module geladen...</p></div></div>
+    <div id="bestellingen" class="tab-content hidden"><div class="bg-white border border-gray-300 p-6"><p class="text-slate-500">Bestellingen module geladen...</p></div></div>
 
 </div>
 
+<div id="editReportModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white w-full max-w-lg border border-gray-400 shadow-2xl p-0">
+        <div class="bg-slate-100 px-4 py-3 border-b border-gray-300 flex justify-between items-center">
+            <h3 class="text-sm font-bold text-slate-700 uppercase">Rapportage Bewerken</h3>
+            <button onclick="closeEditModal()" class="text-slate-500 hover:text-red-600 font-bold">✕</button>
+        </div>
+        <form method="POST" class="p-6">
+            <input type="hidden" name="action" value="edit_report">
+            <input type="hidden" name="report_id" id="modal_report_id">
+            
+            <div class="mb-4">
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Type</label>
+                <select name="report_type" id="modal_type" class="w-full p-2 border border-gray-300 text-sm"><option value="Algemeen">Algemeen</option><option value="Medisch">Medisch</option><option value="Incident">Incident</option></select>
+            </div>
+            <div class="mb-4">
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Stemming</label>
+                <div class="flex gap-2">
+                    <label class="border p-2 flex-1 text-center cursor-pointer hover:bg-slate-50 text-sm"><input type="radio" name="mood" value="Blij" id="modal_mood_blij"> Blij</label>
+                    <label class="border p-2 flex-1 text-center cursor-pointer hover:bg-slate-50 text-sm"><input type="radio" name="mood" value="Rustig" id="modal_mood_rustig"> Rustig</label>
+                    <label class="border p-2 flex-1 text-center cursor-pointer hover:bg-slate-50 text-sm"><input type="radio" name="mood" value="Pijn" id="modal_mood_pijn"> Pijn</label>
+                </div>
+            </div>
+            <div class="mb-4">
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Inhoud</label>
+                <textarea name="content" id="modal_content" rows="5" class="w-full p-2 border border-gray-300 text-sm"></textarea>
+            </div>
+            <div class="flex justify-end gap-2">
+                <button type="button" onclick="closeEditModal()" class="bg-gray-200 text-slate-700 px-4 py-2 text-sm font-bold uppercase">Annuleren</button>
+                <button type="submit" class="bg-blue-700 text-white px-4 py-2 text-sm font-bold uppercase hover:bg-blue-800">Opslaan</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
-    function switchTab(tabId, btnElement) {
-        // 1. Verberg alle content
-        document.querySelectorAll('.tab-content').forEach(function(el) {
-            el.classList.add('hidden');
-            el.classList.remove('block');
-        });
-
-        // 2. Maak alle knoppen inactief (Grijze tekst, transparante border)
-        document.querySelectorAll('.tab-btn').forEach(function(el) {
-            el.classList.remove('active', 'border-blue-600', 'text-blue-600', 'font-bold');
-            el.classList.add('border-transparent', 'text-slate-500', 'font-medium');
-        });
-
-        // 3. Toon gekozen content
-        const activeContent = document.getElementById(tabId);
-        if(activeContent) {
-            activeContent.classList.remove('hidden');
-            activeContent.classList.add('block');
-        }
-
-        // 4. Maak gekozen knop actief (Blauwe tekst, blauwe border)
-        btnElement.classList.remove('border-transparent', 'text-slate-500', 'font-medium');
-        btnElement.classList.add('active', 'border-blue-600', 'text-blue-600', 'font-bold');
+    function switchTab(tabId, btn) {
+        document.querySelectorAll('.tab-content').forEach(e => { e.classList.add('hidden'); e.classList.remove('block'); });
+        document.querySelectorAll('.tab-btn').forEach(e => { e.classList.remove('active', 'border-blue-600', 'text-blue-600', 'font-bold'); e.classList.add('border-transparent', 'text-slate-500', 'font-medium'); });
+        document.getElementById(tabId).classList.remove('hidden'); document.getElementById(tabId).classList.add('block');
+        btn.classList.remove('border-transparent', 'text-slate-500', 'font-medium'); btn.classList.add('active', 'border-blue-600', 'text-blue-600', 'font-bold');
+    }
+    
+    function openEditModal(report) {
+        document.getElementById('editReportModal').classList.remove('hidden');
+        document.getElementById('modal_report_id').value = report.id;
+        document.getElementById('modal_content').value = report.content;
+        document.getElementById('modal_type').value = report.report_type;
+        // Radio buttons checken
+        if(report.mood === 'Blij') document.getElementById('modal_mood_blij').checked = true;
+        if(report.mood === 'Rustig') document.getElementById('modal_mood_rustig').checked = true;
+        if(report.mood === 'Pijn') document.getElementById('modal_mood_pijn').checked = true;
     }
 
-    // Bij laden pagina: Check of er een hash is (bv #zorgplan) en open die tab
+    function closeEditModal() {
+        document.getElementById('editReportModal').classList.add('hidden');
+    }
+
     document.addEventListener("DOMContentLoaded", function() {
         if(window.location.hash) {
-            const hash = window.location.hash.substring(1); // haal # weg
-            const targetBtn = document.querySelector(`button[onclick="switchTab('${hash}', this)"]`);
-            if(targetBtn) {
-                targetBtn.click();
-            }
+            const h = window.location.hash.substring(1);
+            const b = document.querySelector(`button[onclick="switchTab('${h}', this)"]`);
+            if(b) b.click();
         }
     });
 </script>
