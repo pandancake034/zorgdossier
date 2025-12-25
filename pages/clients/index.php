@@ -3,41 +3,58 @@
 include '../../includes/header.php';
 require '../../config/db.php';
 
-// 1. BEVEILIGING
-if ($_SESSION['role'] === 'familie') {
-    echo "<script>window.location.href='../../dashboard.php';</script>";
-    exit;
-}
+// 1. BEVEILIGING & ROL CHECK
+$role = $_SESSION['role'];
+$user_id = $_SESSION['user_id'];
 
 // 2. FILTERS
 $search = $_GET['search'] ?? '';
 $filter_district = $_GET['district'] ?? '';
 $filter_wijk = $_GET['wijk'] ?? '';
 
-// 3. QUERY
-$sql = "SELECT * FROM clients WHERE is_active = 1";
+// 3. QUERY OPBOUWEN
+$sql = "SELECT c.* FROM clients c ";
 $params = [];
 
-if ($search) {
-    $sql .= " AND (first_name LIKE ? OR last_name LIKE ?)";
-    $params[] = "%$search%";
-    $params[] = "%$search%";
-}
-if ($filter_district) {
-    $sql .= " AND district = ?";
-    $params[] = $filter_district;
-}
-if ($filter_wijk) {
-    $sql .= " AND neighborhood = ?";
-    $params[] = $filter_wijk;
+// -> SPECIFIEKE LOGICA VOOR FAMILIE (NIEUW)
+if ($role === 'familie') {
+    // Alleen clients tonen die in de access tabel staan voor deze user_id
+    $sql .= " JOIN family_client_access a ON c.id = a.client_id WHERE c.is_active = 1 AND a.user_id = ? ";
+    $params[] = $user_id;
+    
+} else {
+    // Management/Zuster filters
+    $sql .= " WHERE c.is_active = 1 ";
+    
+    if ($search) {
+        $sql .= " AND (c.first_name LIKE ? OR c.last_name LIKE ?)";
+        $params[] = "%$search%";
+        $params[] = "%$search%";
+    }
+    if ($filter_district) {
+        $sql .= " AND c.district = ?";
+        $params[] = $filter_district;
+    }
+    if ($filter_wijk) {
+        $sql .= " AND c.neighborhood = ?";
+        $params[] = $filter_wijk;
+    }
 }
 
-$sql .= " ORDER BY last_name ASC";
+$sql .= " ORDER BY c.last_name ASC";
 
 try {
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     $clients = $stmt->fetchAll();
+    
+    // UX Verbetering: Als familie maar 1 resultaat heeft (en geen filters), stuur direct door!
+    if ($role === 'familie' && count($clients) === 1 && empty($_GET)) {
+        $cid = $clients[0]['id'];
+        echo "<script>window.location.href='detail.php?id=$cid';</script>";
+        exit;
+    }
+
 } catch (PDOException $e) {
     die("Fout: " . $e->getMessage());
 }
@@ -51,10 +68,14 @@ function calculateAge($dob) {
 
     <div class="bg-white border border-gray-300 p-4 mb-4 flex justify-between items-center">
         <div>
-            <h1 class="text-xl font-bold text-slate-800 uppercase tracking-tight">Cliënten Dossiers</h1>
-            <p class="text-xs text-slate-500">Overzicht en beheer van cliënten</p>
+            <h1 class="text-xl font-bold text-slate-800 uppercase tracking-tight">
+                <?php echo ($role === 'familie') ? 'Mijn Familie' : 'Cliënten Dossiers'; ?>
+            </h1>
+            <p class="text-xs text-slate-500">
+                <?php echo ($role === 'familie') ? 'Selecteer een dossier om te bekijken' : 'Overzicht en beheer van cliënten'; ?>
+            </p>
         </div>
-        <?php if($_SESSION['role'] === 'management'): ?>
+        <?php if($role === 'management'): ?>
         <a href="create.php" class="bg-blue-700 hover:bg-blue-800 text-white text-sm font-medium py-2 px-4 flex items-center transition-colors">
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
             Nieuwe Cliënt
@@ -62,17 +83,14 @@ function calculateAge($dob) {
         <?php endif; ?>
     </div>
 
+    <?php if($role !== 'familie'): ?>
     <form method="GET" class="bg-slate-100 border border-gray-300 p-4 mb-6 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
         <div>
             <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Zoeken</label>
             <div class="relative">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                </div>
-                <input type="text" name="search" value="<?php echo htmlspecialchars($search); ?>" placeholder="Naam..." class="w-full pl-10 p-2 border border-gray-300 text-sm focus:border-blue-500 focus:ring-0">
+                <input type="text" name="search" value="<?php echo htmlspecialchars($search); ?>" placeholder="Naam..." class="w-full p-2 border border-gray-300 text-sm focus:border-blue-500 focus:ring-0">
             </div>
         </div>
-
         <div>
             <label class="block text-xs font-bold text-slate-600 uppercase mb-1">District</label>
             <select name="district" class="w-full p-2 border border-gray-300 text-sm bg-white focus:border-blue-500 focus:ring-0">
@@ -83,7 +101,6 @@ function calculateAge($dob) {
                 ?>
             </select>
         </div>
-
         <div>
             <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Wijk</label>
             <select name="wijk" class="w-full p-2 border border-gray-300 text-sm bg-white focus:border-blue-500 focus:ring-0">
@@ -94,26 +111,21 @@ function calculateAge($dob) {
                 ?>
             </select>
         </div>
-
         <div class="flex space-x-2">
-            <button type="submit" class="bg-slate-700 hover:bg-slate-800 text-white font-medium py-2 px-6 text-sm flex-1">
-                Filteren
-            </button>
-            <a href="index.php" class="bg-white border border-gray-300 text-slate-700 hover:bg-gray-50 font-medium py-2 px-4 text-sm flex items-center justify-center" title="Reset">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-            </a>
+            <button type="submit" class="bg-slate-700 hover:bg-slate-800 text-white font-medium py-2 px-6 text-sm flex-1">Filteren</button>
+            <a href="index.php" class="bg-white border border-gray-300 text-slate-700 hover:bg-gray-50 font-medium py-2 px-4 text-sm flex items-center justify-center">Reset</a>
         </div>
     </form>
+    <?php endif; ?>
 
     <div class="bg-white border border-gray-300 overflow-x-auto">
         <table class="min-w-full text-left text-sm">
             <thead class="bg-slate-50 text-slate-500 border-b border-gray-300 uppercase text-xs">
                 <tr>
-                    <th class="px-4 py-3 font-bold w-12">ID</th>
+                    <th class="px-4 py-3 font-bold w-12">#</th>
                     <th class="px-4 py-3 font-bold">Cliëntnaam</th>
                     <th class="px-4 py-3 font-bold">Leeftijd</th>
-                    <th class="px-4 py-3 font-bold">Adres & Locatie</th>
-                    <th class="px-4 py-3 font-bold">Woonsituatie</th>
+                    <th class="px-4 py-3 font-bold">Locatie</th>
                     <th class="px-4 py-3 font-bold text-right">Actie</th>
                 </tr>
             </thead>
@@ -127,9 +139,6 @@ function calculateAge($dob) {
                                 <div class="font-bold text-slate-800 text-base">
                                     <?php echo htmlspecialchars($client['last_name'] . ', ' . $client['first_name']); ?>
                                 </div>
-                                <div class="text-xs text-slate-500 uppercase tracking-wide">
-                                    <?php echo $client['gender'] == 'M' ? 'Man' : 'Vrouw'; ?>
-                                </div>
                             </td>
 
                             <td class="px-4 py-3">
@@ -140,24 +149,13 @@ function calculateAge($dob) {
                             <td class="px-4 py-3">
                                 <div class="text-slate-800 font-medium"><?php echo htmlspecialchars($client['address']); ?></div>
                                 <div class="text-xs text-slate-500">
-                                    <?php echo htmlspecialchars($client['neighborhood'] . ', ' . $client['district']); ?>
+                                    <?php echo htmlspecialchars($client['neighborhood']); ?>
                                 </div>
-                            </td>
-
-                            <td class="px-4 py-3">
-                                <?php 
-                                    $bg = 'bg-gray-100 text-gray-700 border-gray-200';
-                                    if($client['housing_type'] == 'Zorginstelling') $bg = 'bg-orange-50 text-orange-800 border-orange-200';
-                                    if($client['housing_type'] == 'Woonhuis') $bg = 'bg-green-50 text-green-800 border-green-200';
-                                ?>
-                                <span class="<?php echo $bg; ?> border px-2 py-0.5 text-xs font-bold uppercase tracking-wide">
-                                    <?php echo htmlspecialchars($client['housing_type']); ?>
-                                </span>
                             </td>
 
                             <td class="px-4 py-3 text-right">
                                 <a href="detail.php?id=<?php echo $client['id']; ?>" class="inline-flex items-center text-blue-600 hover:text-blue-800 font-bold text-xs uppercase tracking-wide border border-transparent hover:border-blue-200 px-3 py-1 transition-all">
-                                    Dossier
+                                    Bekijk Dossier
                                     <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
                                 </a>
                             </td>
@@ -165,8 +163,19 @@ function calculateAge($dob) {
                     <?php endforeach; ?>
                 <?php else: ?>
                     <tr>
-                        <td colspan="6" class="px-6 py-8 text-center text-slate-500 italic">
-                            Geen resultaten gevonden voor deze filters.
+                        <td colspan="5" class="px-6 py-12 text-center">
+                            <?php if($role === 'familie'): ?>
+                                <div class="text-slate-400 mb-2">
+                                    <svg class="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="1.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                                </div>
+                                <h3 class="text-lg font-bold text-slate-700">Geen cliënt gekoppeld</h3>
+                                <p class="text-slate-500 text-sm mt-2">
+                                    We konden geen dossier vinden dat gekoppeld is aan uw account (ID: <?php echo $user_id; ?>). <br>
+                                    Neem contact op met de administratie.
+                                </p>
+                            <?php else: ?>
+                                <span class="text-slate-500 italic">Geen resultaten gevonden.</span>
+                            <?php endif; ?>
                         </td>
                     </tr>
                 <?php endif; ?>
