@@ -26,6 +26,7 @@ $base_path = str_repeat('../', max(0, $depth));
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zorgdossier ERP</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         /* Enterprise Font Stack */
         body { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
@@ -60,7 +61,9 @@ $base_path = str_repeat('../', max(0, $depth));
             </a>
 
             <div class="flex-grow flex items-center overflow-x-auto">
-                <a class="nav-item" href="<?php echo $base_path; ?>dashboard.php">Dashboard</a>
+                <a class="nav-item" href="<?php echo $base_path; ?>dashboard.php">
+                    <i class="fa-solid fa-gauge-high mr-1"></i> Dashboard
+                </a>
 
                 <?php if ($role === 'management'): ?>
                     <a class="nav-item" href="<?php echo $base_path; ?>pages/clients/index.php">Cliënten</a>
@@ -85,7 +88,7 @@ $base_path = str_repeat('../', max(0, $depth));
                     <div class="text-xs font-bold text-white"><?php echo htmlspecialchars($username); ?></div>
                 </div>
                 <a href="<?php echo $base_path; ?>logout.php" class="bg-slate-600 hover:bg-red-700 text-white text-xs py-1 px-3 border border-slate-500 hover:border-red-800 transition uppercase font-semibold tracking-wider">
-                    Uitloggen
+                    <i class="fa-solid fa-right-from-bracket mr-1"></i> Uitloggen
                 </a>
             </div>
 
