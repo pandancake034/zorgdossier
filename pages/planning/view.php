@@ -9,16 +9,21 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// 1. BEPAAL DE DAG
+// 1. BEPAAL DE DAG & DATUM
 $english_days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 $dutch_days   = ['Ma',  'Di',  'Wo',  'Do',  'Vr',  'Za',  'Zo'];
+// Mapping voor volledige dagnaam (voor weergave)
+$dutch_days_full = ['Mon'=>'Maandag', 'Tue'=>'Dinsdag', 'Wed'=>'Woensdag', 'Thu'=>'Donderdag', 'Fri'=>'Vrijdag', 'Sat'=>'Zaterdag', 'Sun'=>'Zondag'];
+$dutch_months = ['Jan'=>'Januari', 'Feb'=>'Februari', 'Mar'=>'Maart', 'Apr'=>'April', 'May'=>'Mei', 'Jun'=>'Juni', 'Jul'=>'Juli', 'Aug'=>'Augustus', 'Sep'=>'September', 'Oct'=>'Oktober', 'Nov'=>'November', 'Dec'=>'December'];
+
 $today_en = date('D'); 
 $today_nl = str_replace($english_days, $dutch_days, $today_en);
-$current_date = date('d-m-Y');
+$date_display = $dutch_days_full[$today_en] . ' ' . date('d') . ' ' . $dutch_months[date('M')];
 
 $nurse_id = $_SESSION['user_id'];
 $todays_tasks = [];
 $my_route_names = [];
+$upcoming_shifts = [];
 
 try {
     // 2. STAP A: WELKE ROUTES RIJD IK VANDAAG?
@@ -32,7 +37,7 @@ try {
     $my_route_ids = array_column($routes, 'route_id');
     $my_route_names = array_column($routes, 'name');
 
-    // 3. STAP B: HAAL TAKEN OP (GEKOPPELD AAN TIJDEN)
+    // 3. STAP B: HAAL TAKEN OP (INDIEN VANDAAG)
     if (!empty($my_route_ids)) {
         $placeholders = implode(',', array_fill(0, count($my_route_ids), '?'));
 
@@ -56,12 +61,45 @@ try {
         $todays_tasks = $stmt->fetchAll();
     }
 
-    // 4. CHECK REEDS UITGEVOERDE TAKEN
+    // 4. CHECK REEDS UITGEVOERDE TAKEN (VOOR PROGRESS BAR)
     $log_sql = "SELECT client_care_task_id FROM task_execution_log 
                 WHERE nurse_id = ? AND DATE(executed_at) = CURDATE() AND status = 'Uitgevoerd'";
     $log_stmt = $pdo->prepare($log_sql);
     $log_stmt->execute([$nurse_id]);
     $completed_tasks = $log_stmt->fetchAll(PDO::FETCH_COLUMN);
+
+
+    // 5. NIEUW: HAAL TOEKOMSTIGE DIENSTEN OP (ALS VANDAAG LEEG IS OF VOOR OVERZICHT)
+    // We halen het vaste weekrooster op
+    $roster_stmt = $pdo->prepare("SELECT r.day_of_week, rt.name as route_name, rt.district, rt.time_slot 
+                                  FROM roster r 
+                                  JOIN routes rt ON r.route_id = rt.id 
+                                  WHERE r.nurse_id = ?");
+    $roster_stmt->execute([$nurse_id]);
+    $my_roster = $roster_stmt->fetchAll();
+
+    // We projecteren dit rooster op de komende 14 dagen
+    if(count($my_roster) > 0) {
+        for($i = 1; $i <= 14; $i++) {
+            $ts = strtotime("+$i days");
+            $loop_date = date('Y-m-d', $ts);
+            $loop_day_en = date('D', $ts);
+            $loop_day_nl = str_replace($english_days, $dutch_days, $loop_day_en); // Ma, Di, etc.
+
+            // Check of deze dag in het rooster zit
+            foreach($my_roster as $r_item) {
+                if($r_item['day_of_week'] === $loop_day_nl) {
+                    $upcoming_shifts[] = [
+                        'date' => $loop_date,
+                        'day_name' => $dutch_days_full[$loop_day_en],
+                        'route' => $r_item['route_name'],
+                        'district' => $r_item['district'],
+                        'time_slot' => $r_item['time_slot']
+                    ];
+                }
+            }
+        }
+    }
 
 } catch (PDOException $e) {
     die("Database fout: " . $e->getMessage());
@@ -70,17 +108,18 @@ try {
 
 <div class="w-full max-w-5xl mx-auto mb-12">
     
-    <div class="bg-white border border-gray-300 p-4 mb-6 flex flex-col md:flex-row justify-between items-center">
+    <div class="bg-white border border-gray-300 p-4 mb-6 flex flex-col md:flex-row justify-between items-center shadow-sm">
         <div class="mb-4 md:mb-0">
             <h1 class="text-xl font-bold text-slate-800 uppercase tracking-tight flex items-center">
-                <svg class="w-6 h-6 mr-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
-                Mijn Dagplanning
+                <i class="fa-solid fa-route mr-3 text-slate-400"></i> Mijn Dagplanning
             </h1>
             <div class="text-xs text-slate-500 mt-1 flex items-center gap-2">
-                <span class="font-bold text-slate-700"><?php echo $today_nl . ' ' . $current_date; ?></span>
+                <span class="font-bold text-slate-700"><?php echo $date_display; ?></span>
                 <?php if(!empty($my_route_names)): ?>
                     <span class="text-slate-300">|</span>
-                    <span>Route: <?php echo implode(', ', $my_route_names); ?></span>
+                    <span class="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
+                        <?php echo implode(', ', $my_route_names); ?>
+                    </span>
                 <?php endif; ?>
             </div>
         </div>
@@ -95,8 +134,8 @@ try {
                 <span>Voortgang</span>
                 <span><?php echo $done; ?> / <?php echo $total; ?> taken</span>
             </div>
-            <div class="w-full bg-gray-200 h-2">
-                <div class="bg-blue-600 h-2" style="width: <?php echo $perc; ?>%"></div>
+            <div class="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
+                <div class="bg-blue-600 h-2 rounded-full transition-all duration-500" style="width: <?php echo $perc; ?>%"></div>
             </div>
         </div>
     </div>
@@ -104,8 +143,10 @@ try {
     <?php if(count($todays_tasks) > 0): ?>
         
         <div class="bg-white border border-gray-300 shadow-sm">
-            <div class="bg-slate-100 px-5 py-3 border-b border-gray-300 flex justify-between items-center">
-                <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wide">Route Uitvoering</h3>
+            <div class="bg-slate-50 px-5 py-3 border-b border-gray-300 flex justify-between items-center">
+                <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center">
+                    <i class="fa-solid fa-list-check mr-2"></i> Route Uitvoering
+                </h3>
             </div>
 
             <div class="divide-y divide-gray-200">
@@ -119,25 +160,25 @@ try {
                         $current_client_id = $task['client_id'];
                         $time_display = date('H:i', strtotime($task['route_time']));
                 ?>
-                    <div class="bg-slate-50 p-4 border-t-4 border-t-slate-200 flex flex-col md:flex-row md:items-center justify-between mt-2">
+                    <div class="bg-slate-50 p-4 border-t-4 border-t-slate-200 flex flex-col md:flex-row md:items-center justify-between mt-2 first:mt-0">
                         <div class="flex items-center">
-                            <div class="bg-slate-800 text-white font-bold px-3 py-1 text-sm mr-4 min-w-[60px] text-center">
+                            <div class="bg-slate-800 text-white font-bold px-3 py-1 text-sm mr-4 min-w-[60px] text-center rounded">
                                 <?php echo $time_display; ?>
                             </div>
                             <div>
-                                <h3 class="font-bold text-slate-800 text-base">
+                                <h3 class="font-bold text-slate-800 text-base flex items-center">
                                     <a href="../clients/detail.php?id=<?php echo $task['client_id']; ?>" class="hover:text-blue-700 hover:underline">
                                         <?php echo htmlspecialchars($task['first_name'] . ' ' . $task['last_name']); ?>
                                     </a>
                                 </h3>
                                 <div class="text-xs text-slate-500 flex items-center">
-                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                    <i class="fa-solid fa-location-dot mr-1.5 text-slate-400"></i>
                                     <?php echo htmlspecialchars($task['address']); ?>
                                 </div>
                             </div>
                         </div>
-                        <a href="../clients/detail.php?id=<?php echo $task['client_id']; ?>#zorgplan" class="mt-2 md:mt-0 text-xs font-bold text-blue-600 uppercase hover:text-blue-800 flex items-center">
-                            Dossier Openen <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                        <a href="../clients/detail.php?id=<?php echo $task['client_id']; ?>#zorgplan" class="mt-2 md:mt-0 text-xs font-bold text-blue-600 uppercase hover:text-blue-800 flex items-center bg-blue-50 px-3 py-1.5 rounded border border-blue-100 hover:bg-blue-100 transition">
+                            <i class="fa-solid fa-folder-open mr-1.5"></i> Dossier Openen
                         </a>
                     </div>
                 <?php endif; ?>
@@ -152,7 +193,7 @@ try {
                                 if($task['time_of_day'] == 'Middag') $badge_class = 'bg-yellow-50 text-yellow-800 border-yellow-200';
                                 if($task['time_of_day'] == 'Avond') $badge_class = 'bg-indigo-50 text-indigo-800 border-indigo-200';
                             ?>
-                            <span class="text-[10px] uppercase font-bold px-1.5 py-0.5 border <?php echo $badge_class; ?>">
+                            <span class="text-[10px] uppercase font-bold px-1.5 py-0.5 border rounded-sm <?php echo $badge_class; ?>">
                                 <?php echo $task['time_of_day']; ?>
                             </span>
                             <span class="font-semibold text-sm text-slate-700">
@@ -171,13 +212,13 @@ try {
                             <form action="toggle_task.php" method="POST">
                                 <input type="hidden" name="task_id" value="<?php echo $task['id']; ?>">
                                 <input type="hidden" name="status" value="Uitgevoerd">
-                                <button type="submit" class="w-6 h-6 border-2 border-slate-300 text-white hover:border-blue-600 hover:bg-blue-600 flex items-center justify-center transition-all shadow-sm" title="Markeer als voltooid">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                                <button type="submit" class="w-8 h-8 rounded-full border-2 border-slate-300 text-white hover:border-green-500 hover:bg-green-500 flex items-center justify-center transition-all shadow-sm text-lg" title="Markeer als voltooid">
+                                    <i class="fa-solid fa-check opacity-0 hover:opacity-100"></i>
                                 </button>
                             </form>
                         <?php else: ?>
-                            <div class="text-green-600">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            <div class="text-green-600 text-xl">
+                                <i class="fa-solid fa-circle-check"></i>
                             </div>
                         <?php endif; ?>
                     </div>
@@ -187,23 +228,72 @@ try {
             </div>
             
             <div class="bg-gray-50 p-4 text-center border-t border-gray-300">
-                <span class="text-xs font-bold text-slate-400 uppercase">Einde van de route</span>
+                <span class="text-xs font-bold text-slate-400 uppercase"><i class="fa-solid fa-flag-checkered mr-1"></i> Einde van de route</span>
             </div>
         </div>
 
     <?php else: ?>
         
-        <div class="bg-white border border-gray-300 p-12 text-center">
-            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-100 mb-4 text-slate-400">
-                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="square" stroke-linejoin="miter" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+        <div class="space-y-6">
+            <div class="bg-white border border-gray-300 p-8 text-center rounded-lg shadow-sm">
+                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-100 mb-4 text-slate-400">
+                    <i class="fa-solid fa-mug-hot text-3xl"></i>
+                </div>
+                <h3 class="text-lg font-bold text-slate-800">Geen diensten vandaag</h3>
+                <p class="text-slate-500 text-sm mt-2 mb-4">
+                    U staat voor vandaag (<?php echo $today_nl; ?>) niet ingeroosterd. <br>Geniet van uw vrije dag!
+                </p>
+                <a href="../../dashboard.php" class="inline-block bg-white border border-gray-300 hover:bg-gray-50 text-slate-700 font-bold py-2 px-6 text-sm rounded shadow-sm transition">
+                    Terug naar Dashboard
+                </a>
             </div>
-            <h3 class="text-lg font-bold text-slate-800">Geen route gepland</h3>
-            <p class="text-slate-500 text-sm mt-2 mb-6">
-                U staat voor vandaag (<?php echo $today_nl; ?>) niet ingeroosterd, <br>of de planning heeft nog geen route vrijgegeven.
-            </p>
-            <a href="../../dashboard.php" class="inline-block bg-slate-700 hover:bg-slate-800 text-white font-bold py-2 px-6 text-sm uppercase">
-                Terug naar Dashboard
-            </a>
+
+            <div class="bg-white border border-gray-300 rounded-lg shadow-sm overflow-hidden">
+                <div class="bg-slate-50 px-5 py-3 border-b border-gray-300 flex items-center">
+                    <i class="fa-solid fa-calendar-days text-slate-400 mr-2"></i>
+                    <h3 class="text-xs font-bold text-slate-700 uppercase">Uw Eerstvolgende Diensten</h3>
+                </div>
+                
+                <?php if(count($upcoming_shifts) > 0): ?>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-white border-b border-gray-200 text-slate-500 uppercase text-xs">
+                                <tr>
+                                    <th class="px-5 py-3 font-medium">Datum</th>
+                                    <th class="px-5 py-3 font-medium">Route</th>
+                                    <th class="px-5 py-3 font-medium">Wijk</th>
+                                    <th class="px-5 py-3 font-medium text-right">Tijdslot</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <?php foreach($upcoming_shifts as $shift): ?>
+                                    <tr class="hover:bg-slate-50">
+                                        <td class="px-5 py-3 font-bold text-slate-700">
+                                            <?php echo date('d-m', strtotime($shift['date'])); ?>
+                                            <span class="font-normal text-slate-500 ml-1">(<?php echo $shift['day_name']; ?>)</span>
+                                        </td>
+                                        <td class="px-5 py-3 text-slate-700">
+                                            <?php echo htmlspecialchars($shift['route']); ?>
+                                        </td>
+                                        <td class="px-5 py-3 text-slate-600 text-xs uppercase font-bold">
+                                            <?php echo htmlspecialchars($shift['district']); ?>
+                                        </td>
+                                        <td class="px-5 py-3 text-right">
+                                            <span class="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded text-xs font-bold">
+                                                <?php echo htmlspecialchars($shift['time_slot']); ?>
+                                            </span>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php else: ?>
+                    <div class="p-6 text-center text-slate-400 italic">
+                        Geen diensten gevonden in de komende 14 dagen.
+                    </div>
+                <?php endif; ?>
+            </div>
         </div>
 
     <?php endif; ?>
