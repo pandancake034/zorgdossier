@@ -333,7 +333,7 @@ try {
         
         <?php if ($role === 'management'): ?>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div class="bg-white border border-gray-300 p-5 flex items-center justify-between shadow-sm group hover:border-blue-400 transition-colors">
+                <a href="pages/clients/index.php" class="bg-white border border-gray-300 p-5 flex items-center justify-between shadow-sm group hover:border-blue-400 transition-colors cursor-pointer">
                     <div>
                         <div class="text-xs text-slate-500 uppercase font-bold tracking-wider">Actieve Cliënten</div>
                         <div class="text-3xl font-bold text-slate-800 mt-2"><?php echo $stats['clients']; ?></div>
@@ -341,8 +341,9 @@ try {
                     <div class="text-slate-200 group-hover:text-blue-200 transition-colors">
                         <i class="fa-solid fa-users text-4xl"></i>
                     </div>
-                </div>
-                <div class="bg-white border border-gray-300 p-5 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-orange-400 transition-colors">
+                </a>
+
+                <a href="pages/planning/manage_orders.php" class="bg-white border border-gray-300 p-5 flex items-center justify-between shadow-sm relative overflow-hidden group hover:border-orange-400 transition-colors cursor-pointer">
                     <?php if($stats['orders'] > 0): ?><div class="absolute top-0 right-0 w-3 h-3 bg-orange-500 rounded-bl-lg"></div><?php endif; ?>
                     <div>
                         <div class="text-xs text-slate-500 uppercase font-bold tracking-wider">Open Orders</div>
@@ -351,8 +352,9 @@ try {
                     <div class="text-slate-200 group-hover:text-orange-200 transition-colors">
                         <i class="fa-solid fa-box-open text-4xl"></i>
                     </div>
-                </div>
-                <div class="bg-white border border-gray-300 p-5 flex items-center justify-between shadow-sm group hover:border-teal-400 transition-colors">
+                </a>
+
+                <a href="pages/users/index.php" class="bg-white border border-gray-300 p-5 flex items-center justify-between shadow-sm group hover:border-teal-400 transition-colors cursor-pointer">
                     <div>
                         <div class="text-xs text-slate-500 uppercase font-bold tracking-wider">Zorgpersoneel</div>
                         <div class="text-3xl font-bold text-slate-800 mt-2"><?php echo $stats['nurses']; ?></div>
@@ -360,7 +362,7 @@ try {
                     <div class="text-slate-200 group-hover:text-teal-200 transition-colors">
                         <i class="fa-solid fa-user-nurse text-4xl"></i>
                     </div>
-                </div>
+                </a>
             </div>
         <?php endif; ?>
 
