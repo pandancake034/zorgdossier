@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // B. RAPPORTAGE TOEVOEGEN
     if (isset($_POST['action']) && $_POST['action'] === 'add_report') {
         $content = $_POST['content'];
-        $mood = $_POST['mood']; // Komt nu uit slider (hidden input)
+        $mood = $_POST['mood'];
         $type = $_POST['report_type'];
         $visible = isset($_POST['visible_to_family']) ? 1 : 0;
         
@@ -114,10 +114,15 @@ try {
     $stmt_task->execute([$client_id]);
     $care_tasks = $stmt_task->fetchAll();
 
-    // 4. MEDICATIE
+    // 4. MEDICATIE & BIBLIOTHEEK
+    $med_library = $pdo->query("SELECT name, standard_dosage FROM medication_library ORDER BY name")->fetchAll();
+    
     $med_stmt = $pdo->prepare("SELECT * FROM client_medications WHERE client_id = ? ORDER BY times");
     $med_stmt->execute([$client_id]);
     $medications = $med_stmt->fetchAll();
+
+    // 5. ZORGTAKEN BIBLIOTHEEK (voor modal/edit opties later)
+    $library_tasks = $pdo->query("SELECT * FROM task_library ORDER BY category, title")->fetchAll();
 
 } catch (PDOException $e) {
     die("Database fout: " . $e->getMessage());
@@ -196,7 +201,7 @@ try {
 
             <div class="bg-white border border-gray-300 shadow-sm flex flex-col h-[600px]">
                 <div class="bg-slate-800 text-white px-4 py-3 border-b border-slate-900 flex justify-between items-center">
-                    <h3 class="text-xs font-bold uppercase tracking-wide">Notities & Communicatie</h3>
+                    <h3 class="text-xs font-bold uppercase tracking-wide">Communicatie Logboek</h3>
                     <span class="bg-slate-700 text-[10px] px-2 py-0.5 border border-slate-600"><?php echo count($chat_notes); ?></span>
                 </div>
                 
@@ -245,9 +250,7 @@ try {
             <div class="p-6">
                 <?php if(count($care_tasks) > 0): ?>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <?php foreach($care_tasks as $task): 
-                            $taskJson = htmlspecialchars(json_encode($task), ENT_QUOTES, 'UTF-8');
-                        ?>
+                        <?php foreach($care_tasks as $task): $taskJson = htmlspecialchars(json_encode($task), ENT_QUOTES, 'UTF-8'); ?>
                             <div onclick='openTaskModal(<?php echo $taskJson; ?>)' class="border border-gray-200 p-4 hover:bg-blue-50 hover:border-blue-300 cursor-pointer transition-all group relative bg-white">
                                 <div class="flex justify-between items-start mb-2">
                                     <h4 class="font-bold text-slate-800 text-sm group-hover:text-blue-800"><?php echo htmlspecialchars($task['title']); ?></h4>
@@ -281,30 +284,18 @@ try {
                             <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Type</label>
                             <select name="report_type" class="w-full p-2 border border-gray-300 text-sm bg-slate-50 focus:bg-white"><option>Algemeen</option><option>Medisch</option><option>Incident</option></select>
                         </div>
-                        
                         <div class="mb-6">
-                            <label class="block text-xs font-bold text-slate-500 uppercase mb-2 flex justify-between">
-                                Stemming
-                                <span id="new_mood_display" class="text-blue-700 font-bold">Rustig</span>
-                            </label>
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-2 flex justify-between">Stemming <span id="new_mood_display" class="text-blue-700 font-bold">Rustig</span></label>
                             <input type="range" min="0" max="2" value="1" class="w-full h-2 bg-slate-200 rounded-none appearance-none cursor-pointer" oninput="updateMood(this.value, 'new_mood_display', 'new_mood_input')">
                             <input type="hidden" name="mood" id="new_mood_input" value="Rustig">
-                            <div class="flex justify-between text-[9px] text-slate-400 uppercase font-bold mt-2">
-                                <span>Pijn</span>
-                                <span>Rustig</span>
-                                <span>Blij</span>
-                            </div>
+                            <div class="flex justify-between text-[9px] text-slate-400 uppercase font-bold mt-2"><span>Pijn</span><span>Rustig</span><span>Blij</span></div>
                         </div>
-
                         <div class="mb-4">
                             <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Inhoud</label>
                             <textarea name="content" rows="4" class="w-full p-2 border border-gray-300 text-sm focus:border-blue-500 focus:ring-0" placeholder="Typ rapportage..."></textarea>
                         </div>
                         <div class="mb-4">
-                            <label class="inline-flex items-center text-sm text-slate-600">
-                                <input type="checkbox" name="visible_to_family" checked class="text-blue-600 border-gray-300 focus:ring-0 mr-2">
-                                Zichtbaar voor familie
-                            </label>
+                            <label class="inline-flex items-center text-sm text-slate-600"><input type="checkbox" name="visible_to_family" checked class="text-blue-600 border-gray-300 focus:ring-0 mr-2">Zichtbaar voor familie</label>
                         </div>
                         <button type="submit" class="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-2 text-sm uppercase">Opslaan</button>
                     </form>
@@ -318,19 +309,10 @@ try {
                     <div class="overflow-x-auto">
                         <table class="w-full text-left text-sm">
                             <thead class="bg-slate-50 border-b border-gray-200 text-slate-500 uppercase text-xs">
-                                <tr>
-                                    <th class="px-4 py-3">Datum</th>
-                                    <th class="px-4 py-3">Type</th>
-                                    <th class="px-4 py-3">Auteur</th>
-                                    <th class="px-4 py-3 w-1/2">Inhoud</th>
-                                    <th class="px-4 py-3 text-right">Actie</th>
-                                </tr>
+                                <tr><th class="px-4 py-3">Datum</th><th class="px-4 py-3">Type</th><th class="px-4 py-3">Auteur</th><th class="px-4 py-3 w-1/2">Inhoud</th><th class="px-4 py-3 text-right">Actie</th></tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
-                                <?php foreach($reports as $r): 
-                                    $can_edit = ($r['author_id'] == $user_id || $user_role === 'management');
-                                    $rJson = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
-                                ?>
+                                <?php foreach($reports as $r): $can_edit = ($r['author_id'] == $user_id || $user_role === 'management'); $rJson = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8'); ?>
                                 <tr class="hover:bg-slate-50">
                                     <td class="px-4 py-3 text-slate-600 whitespace-nowrap align-top"><?php echo date('d-m-Y H:i', strtotime($r['created_at'])); ?></td>
                                     <td class="px-4 py-3 align-top"><span class="text-[10px] font-bold bg-gray-100 border border-gray-200 px-1 py-0.5 uppercase text-slate-600"><?php echo htmlspecialchars($r['report_type']); ?></span></td>
@@ -360,21 +342,76 @@ try {
     </div>
 
     <div id="medisch" class="tab-content hidden">
-        <div class="bg-white border border-gray-300 p-6 shadow-sm">
-            <h3 class="text-xs font-bold text-slate-700 uppercase border-b border-gray-200 pb-2 mb-4">Medicatie</h3>
-            <table class="w-full text-sm text-left">
-                <thead class="bg-slate-50 text-slate-500 border-b uppercase text-xs"><tr><th class="p-2">Naam</th><th class="p-2">Dosis</th><th class="p-2">Tijden</th><th class="p-2">Nota</th></tr></thead>
-                <tbody class="divide-y divide-gray-100">
-                    <?php foreach($medications as $m): ?>
-                    <tr>
-                        <td class="p-2 font-bold text-slate-700"><?php echo htmlspecialchars($m['name']); ?></td>
-                        <td class="p-2 text-slate-600"><?php echo htmlspecialchars($m['dosage']); ?></td>
-                        <td class="p-2"><span class="bg-blue-50 text-blue-800 border border-blue-200 px-1 py-0.5 text-xs font-bold"><?php echo htmlspecialchars($m['times']); ?></span></td>
-                        <td class="p-2 text-slate-500 italic"><?php echo htmlspecialchars($m['notes']); ?></td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <div class="lg:col-span-2 bg-white border border-gray-300 shadow-sm">
+                <div class="bg-slate-100 px-4 py-2 border-b border-gray-300"><h3 class="text-xs font-bold text-slate-700 uppercase">Medicatie Overzicht</h3></div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-slate-50 text-slate-500 border-b uppercase text-xs">
+                            <tr><th class="p-3">Naam</th><th class="p-3">Dosis</th><th class="p-3">Tijden</th><th class="p-3">Nota</th><th class="p-3"></th></tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            <?php foreach($medications as $m): ?>
+                            <tr class="hover:bg-slate-50">
+                                <td class="p-3 font-bold text-slate-700"><?php echo htmlspecialchars($m['name']); ?></td>
+                                <td class="p-3 text-slate-600"><?php echo htmlspecialchars($m['dosage']); ?></td>
+                                <td class="p-3"><span class="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 text-xs font-bold"><?php echo htmlspecialchars($m['times']); ?></span></td>
+                                <td class="p-3 text-slate-500 italic"><?php echo htmlspecialchars($m['notes']); ?></td>
+                                <td class="p-3 text-right">
+                                    <?php if($user_role !== 'familie'): ?>
+                                        <a href="save_medication.php?action=delete&delete_id=<?php echo $m['id']; ?>&client_id=<?php echo $client_id; ?>" class="text-red-400 hover:text-red-600 font-bold" onclick="return confirm('Verwijderen?');">✕</a>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <?php if($user_role !== 'familie'): ?>
+            <div class="lg:col-span-1">
+                <div class="bg-white border border-gray-300 shadow-sm p-4 sticky top-4">
+                    <h3 class="text-xs font-bold text-slate-700 uppercase mb-4 border-b border-gray-200 pb-2">Medicijn Toevoegen</h3>
+                    <form action="save_medication.php" method="POST">
+                        <input type="hidden" name="action" value="add">
+                        <input type="hidden" name="client_id" value="<?php echo $client_id; ?>">
+                        
+                        <div class="mb-3">
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Medicijn</label>
+                            <input type="text" list="medList" name="name" class="w-full p-2 border border-gray-300 text-sm focus:border-blue-600 focus:ring-0" placeholder="Zoek of typ..." required>
+                            <datalist id="medList">
+                                <?php foreach($med_library as $ml): ?><option value="<?php echo htmlspecialchars($ml['name']); ?>"><?php endforeach; ?>
+                            </datalist>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-3 mb-3">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Sterkte</label>
+                                <input type="text" name="dosage" class="w-full p-2 border border-gray-300 text-sm" placeholder="bv. 500mg">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Frequentie</label>
+                                <input type="text" name="frequency" class="w-full p-2 border border-gray-300 text-sm" placeholder="bv. 3x daags">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tijdstippen</label>
+                            <input type="text" name="times" class="w-full p-2 border border-gray-300 text-sm" placeholder="bv. 08:00, 14:00, 20:00">
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Bijzonderheden</label>
+                            <input type="text" name="notes" class="w-full p-2 border border-gray-300 text-sm" placeholder="bv. Met eten innemen">
+                        </div>
+
+                        <button type="submit" class="w-full bg-slate-700 hover:bg-slate-800 text-white font-bold py-2 text-sm uppercase">Toevoegen</button>
+                    </form>
+                </div>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
 
@@ -417,23 +454,17 @@ try {
             </div>
             
             <div class="mb-6">
-                <label class="block text-xs font-bold text-slate-500 uppercase mb-2 flex justify-between">
-                    Stemming
-                    <span id="edit_mood_display" class="text-blue-700 font-bold">Rustig</span>
-                </label>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2 flex justify-between">Stemming <span id="edit_mood_display" class="text-blue-700 font-bold">Rustig</span></label>
                 <input type="range" min="0" max="2" value="1" id="edit_mood_range" class="w-full h-2 bg-slate-200 rounded-none appearance-none cursor-pointer" oninput="updateMood(this.value, 'edit_mood_display', 'edit_mood_input')">
                 <input type="hidden" name="mood" id="edit_mood_input">
-                <div class="flex justify-between text-[9px] text-slate-400 uppercase font-bold mt-2">
-                    <span>Pijn</span>
-                    <span>Rustig</span>
-                    <span>Blij</span>
-                </div>
+                <div class="flex justify-between text-[9px] text-slate-400 uppercase font-bold mt-2"><span>Pijn</span><span>Rustig</span><span>Blij</span></div>
             </div>
 
             <div class="mb-4">
                 <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Inhoud</label>
                 <textarea name="content" id="e_content" rows="5" class="w-full p-2 border border-gray-300 text-sm"></textarea>
             </div>
+            
             <div class="flex justify-end gap-2">
                 <button type="button" onclick="document.getElementById('editReportModal').classList.add('hidden')" class="bg-gray-200 text-slate-700 px-4 py-2 text-xs font-bold uppercase">Annuleren</button>
                 <button type="submit" class="bg-blue-700 text-white px-4 py-2 text-xs font-bold uppercase hover:bg-blue-800">Opslaan</button>
@@ -460,7 +491,6 @@ try {
         document.getElementById('mTaskDays').innerText = task.specific_days || 'Dagelijks / Alle dagen';
     }
 
-    // SLIDER LOGICA
     const moodMap = ['Pijn', 'Rustig', 'Blij'];
     function updateMood(val, labelId, inputId) {
         const m = moodMap[val];
@@ -473,12 +503,7 @@ try {
         document.getElementById('e_id').value = report.id;
         document.getElementById('e_content').value = report.content;
         document.getElementById('e_type').value = report.report_type;
-        
-        // Slider instellen op basis van opgeslagen waarde
-        let val = 1; // Default Rustig
-        if(report.mood === 'Pijn') val = 0;
-        if(report.mood === 'Blij') val = 2;
-        
+        let val = 1; if(report.mood === 'Pijn') val = 0; if(report.mood === 'Blij') val = 2;
         document.getElementById('edit_mood_range').value = val;
         updateMood(val, 'edit_mood_display', 'edit_mood_input');
     }
