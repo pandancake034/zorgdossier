@@ -182,21 +182,21 @@ try {
                 </div>
                 
                 <div class="bg-white border border-gray-300 shadow-sm">
-                    <div class="bg-slate-100 px-4 py-2 border-b border-gray-300"><h3 class="text-xs font-bold text-slate-700 uppercase">Contact</h3></div>
-                    <div class="p-4">
-                        <div class="bg-blue-50 border border-blue-100 p-3 mb-3">
-                            <span class="text-[10px] font-bold text-blue-800 uppercase block mb-1">Eerste Contactpersoon</span>
-                            <div class="font-bold text-slate-800 text-sm"><?php echo htmlspecialchars($client['contact1_name']); ?></div>
-                            <div class="text-slate-600 text-xs mt-1">Tel: <?php echo htmlspecialchars($client['contact1_phone']); ?></div>
-                        </div>
-                        <?php if($client['notes']): ?>
-                            <div class="bg-yellow-50 border border-yellow-100 p-3 text-sm text-slate-700">
-                                <span class="block text-[10px] font-bold text-yellow-800 uppercase mb-1">Bijzonderheden</span>
-                                <span class="italic"><?php echo nl2br(htmlspecialchars($client['notes'])); ?></span>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
+    <div class="bg-slate-100 px-4 py-2 border-b border-gray-300"><h3 class="text-xs font-bold text-slate-700 uppercase">Contact</h3></div>
+    <div class="p-4">
+        <div class="bg-blue-50 border border-blue-100 p-3 mb-3">
+            <span class="text-[10px] font-bold text-blue-800 uppercase block mb-1">Eerste Contactpersoon</span>
+            <div class="font-bold text-slate-800 text-sm"><?php echo htmlspecialchars($client['contact1_name'] ?? ''); ?></div>
+            <div class="text-slate-600 text-xs mt-1">Tel: <?php echo htmlspecialchars($client['contact1_phone'] ?? ''); ?></div>
+        </div>
+        <?php if(!empty($client['notes'])): ?>
+            <div class="bg-yellow-50 border border-yellow-100 p-3 text-sm text-slate-700">
+                <span class="block text-[10px] font-bold text-yellow-800 uppercase mb-1">Bijzonderheden</span>
+                <span class="italic"><?php echo nl2br(htmlspecialchars($client['notes'] ?? '')); ?></span>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
             </div>
 
             <div class="bg-white border border-gray-300 shadow-sm flex flex-col h-[600px]">
