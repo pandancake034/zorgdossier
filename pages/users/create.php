@@ -12,6 +12,10 @@ if ($_SESSION['role'] !== 'management') {
 // Haal cliënten op voor de familie-koppeling
 $clients = $pdo->query("SELECT id, first_name, last_name, district FROM clients WHERE is_active = 1 ORDER BY last_name")->fetchAll();
 
+// Hulp Arrays (Gelijk aan de cliënt stamkaart om database fouten te voorkomen)
+$districten = ['Paramaribo','Wanica','Commewijne','Para','Saramacca','Marowijne','Coronie','Nickerie','Brokopondo','Sipaliwini'];
+$wijken = ['Centrum','Beekhuizen','Blauwgrond','Flora','Latour','Livorno','Munder','Pontbuiten','Rainville','Tammenga','Weg naar See','Welgelegen','Overig'];
+
 // VERWERKEN VAN HET FORMULIER
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
@@ -37,13 +41,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // 2. ROL SPECIFIEKE ACTIES
         if ($role === 'zuster') {
             
-            // Variabelen voorbereiden (leeglaten indien niet ingevuld om SQL errors te voorkomen)
+            // Variabelen voorbereiden
             $contract_hours   = !empty($_POST['contract_hours']) ? $_POST['contract_hours'] : 0.00;
             $hourly_wage      = !empty($_POST['hourly_wage']) ? $_POST['hourly_wage'] : 0.00;
             $travel_allowance = !empty($_POST['travel_allowance']) ? $_POST['travel_allowance'] : 0.00;
             $date_employed    = !empty($_POST['date_employed']) ? $_POST['date_employed'] : date('Y-m-d');
             $has_car          = isset($_POST['has_car']) ? 1 : 0; 
 
+            // Let op: District en Neighborhood komen nu uit een select, dus altijd valide.
             $sql_profile = "INSERT INTO nurse_profiles 
             (user_id, first_name, last_name, gender, dob, address, city, district, neighborhood, phone, job_title, contract_type, date_employed, contract_hours, hourly_wage, travel_allowance, has_car, notes) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
@@ -190,23 +195,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <label class="block text-xs font-bold text-slate-500 mb-1">Straat + Huisnummer</label>
                         <input type="text" name="address" class="w-full p-2 border border-gray-300 text-sm" placeholder="Adres">
                     </div>
+                    
                     <div>
                         <label class="block text-xs font-bold text-slate-500 mb-1">Wijk / Buurt</label>
-                        <input type="text" name="neighborhood" class="w-full p-2 border border-gray-300 text-sm">
+                        <select name="neighborhood" class="w-full p-2 border border-gray-300 text-sm bg-white">
+                            <?php foreach($wijken as $w): ?>
+                                <option value="<?php echo $w; ?>"><?php echo $w; ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 mb-1">Stad / District</label>
-                        <div class="grid grid-cols-2 gap-2">
-                            <input type="text" name="city" placeholder="Stad" class="w-full p-2 border border-gray-300 text-sm">
-                            <input type="text" name="district" placeholder="District" class="w-full p-2 border border-gray-300 text-sm">
-                        </div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">District</label>
+                        <select name="district" class="w-full p-2 border border-gray-300 text-sm bg-white">
+                            <?php foreach($districten as $d): ?>
+                                <option value="<?php echo $d; ?>"><?php echo $d; ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Stad</label>
+                        <input type="text" name="city" placeholder="Stad" class="w-full p-2 border border-gray-300 text-sm">
+                    </div>
+                    
                     <div>
                         <label class="block text-xs font-bold text-slate-500 mb-1">Telefoonnummer</label>
                         <input type="text" name="phone" class="w-full p-2 border border-gray-300 text-sm">
                     </div>
                     <div class="flex items-end">
-                        <label class="flex items-center space-x-2 p-2 border border-gray-200 rounded w-full bg-gray-50 cursor-pointer">
+                        <label class="flex items-center space-x-2 p-2 border border-gray-200 rounded w-full bg-gray-50 cursor-pointer hover:bg-white">
                             <input type="checkbox" name="has_car" value="1" class="text-blue-600 focus:ring-0 rounded">
                             <span class="text-sm text-slate-700 font-medium">Heeft eigen vervoer (Auto)</span>
                         </label>
