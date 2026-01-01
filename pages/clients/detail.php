@@ -273,10 +273,13 @@ try {
             </div>
 
             <div id="zorgplan" class="tab-content hidden space-y-4">
-                <div class="flex justify-between items-end mb-2">
+                <div class="flex justify-between items-center mb-4">
                     <h3 class="font-bold text-slate-700">Geplande Zorgtaken</h3>
                     <?php if($user_role !== 'familie'): ?>
-                        <?php endif; ?>
+                        <button onclick="document.getElementById('addTaskModal').classList.remove('hidden')" class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2 px-3 rounded shadow-sm transition">
+                            <i class="fa-solid fa-plus mr-1"></i> Taak Toevoegen
+                        </button>
+                    <?php endif; ?>
                 </div>
 
                 <?php if(count($care_tasks) > 0): ?>
@@ -305,6 +308,11 @@ try {
                 <div class="bg-white border border-gray-200 rounded shadow-sm overflow-hidden">
                     <div class="bg-slate-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
                         <h3 class="text-xs font-bold text-slate-700 uppercase"><i class="fa-solid fa-pills mr-2"></i> Actuele Medicatie</h3>
+                        <?php if($user_role !== 'familie'): ?>
+                            <button onclick="document.getElementById('addMedModal').classList.remove('hidden')" class="bg-green-600 hover:bg-green-700 text-white text-[10px] font-bold py-1.5 px-3 rounded shadow-sm transition">
+                                <i class="fa-solid fa-plus mr-1"></i> Medicijn Toevoegen
+                            </button>
+                        <?php endif; ?>
                     </div>
                     <table class="w-full text-sm text-left">
                         <thead class="bg-white text-slate-500 border-b border-gray-200 uppercase text-xs">
@@ -323,7 +331,7 @@ try {
                     </table>
                     <?php if($user_role !== 'familie'): ?>
                         <div class="p-3 bg-slate-50 border-t border-gray-200">
-                             <p class="text-xs text-center text-slate-400">Beheer medicatie via het Management portaal of 'Medicijn toevoegen' in oude weergave.</p>
+                             <p class="text-xs text-center text-slate-400">Beheer medicatie via het Management portaal of 'Medicijn toevoegen' hierboven.</p>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -500,6 +508,107 @@ try {
         <div class="bg-slate-50 px-4 py-3 border-t border-gray-200 text-right">
             <button onclick="document.getElementById('taskModal').classList.add('hidden')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded text-xs font-bold uppercase">Sluiten</button>
         </div>
+    </div>
+</div>
+
+<div id="addMedModal" class="fixed inset-0 bg-black bg-opacity-60 hidden flex items-center justify-center z-50 backdrop-blur-sm">
+    <div class="bg-white w-full max-w-md rounded-lg shadow-2xl overflow-hidden">
+        <div class="bg-teal-700 text-white px-4 py-3 flex justify-between items-center">
+            <h3 class="text-sm font-bold uppercase tracking-wide">Nieuwe Medicatie</h3>
+            <button onclick="document.getElementById('addMedModal').classList.add('hidden')" class="text-white hover:text-red-300 font-bold text-lg">&times;</button>
+        </div>
+        <form action="save_medication.php" method="POST" class="p-6 space-y-4">
+            <input type="hidden" name="action" value="add">
+            <input type="hidden" name="client_id" value="<?php echo $client_id; ?>">
+            
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Naam Medicijn</label>
+                <input type="text" name="name" required class="w-full p-2 border border-gray-300 rounded text-sm focus:border-teal-500 focus:ring-0">
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Dosering</label>
+                    <input type="text" name="dosage" placeholder="bv. 50mg" class="w-full p-2 border border-gray-300 rounded text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Frequentie</label>
+                    <input type="text" name="frequency" placeholder="bv. 3x daags" class="w-full p-2 border border-gray-300 rounded text-sm">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tijdstippen (Korte notatie)</label>
+                <input type="text" name="times" placeholder="bv. Ochtend, Avond" class="w-full p-2 border border-gray-300 rounded text-sm">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Opmerking / Instructie</label>
+                <textarea name="notes" rows="2" class="w-full p-2 border border-gray-300 rounded text-sm"></textarea>
+            </div>
+
+            <div class="text-right pt-2">
+                <button type="submit" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded text-xs uppercase shadow-sm">Toevoegen</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="addTaskModal" class="fixed inset-0 bg-black bg-opacity-60 hidden flex items-center justify-center z-50 backdrop-blur-sm">
+    <div class="bg-white w-full max-w-md rounded-lg shadow-2xl overflow-hidden">
+        <div class="bg-blue-700 text-white px-4 py-3 flex justify-between items-center">
+            <h3 class="text-sm font-bold uppercase tracking-wide">Nieuwe Zorgtaak</h3>
+            <button onclick="document.getElementById('addTaskModal').classList.add('hidden')" class="text-white hover:text-red-300 font-bold text-lg">&times;</button>
+        </div>
+        <form action="save_task.php" method="POST" class="p-6 space-y-4">
+            <input type="hidden" name="client_id" value="<?php echo $client_id; ?>">
+            
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Taak Titel</label>
+                <input type="text" name="title" required placeholder="bv. Insuline spuiten" class="w-full p-2 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-0">
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Dagdeel</label>
+                    <select name="time_of_day" class="w-full p-2 border border-gray-300 rounded text-sm bg-white">
+                        <option>Ochtend</option>
+                        <option>Middag</option>
+                        <option>Avond</option>
+                        <option>Nacht</option>
+                        <option>Hele dag</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Frequentie</label>
+                    <select name="frequency" class="w-full p-2 border border-gray-300 rounded text-sm bg-white" onchange="document.getElementById('specificDays').style.display = (this.value === 'Specifieke dagen') ? 'flex' : 'none';">
+                        <option>Dagelijks</option>
+                        <option>Wekelijks</option>
+                        <option>Specifieke dagen</option>
+                        <option>Zo nodig</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="specificDays" class="hidden flex-wrap gap-2 bg-gray-50 p-2 rounded border border-gray-200">
+                <?php $days = ['Ma','Di','Wo','Do','Vr','Za','Zo']; 
+                foreach($days as $d): ?>
+                    <label class="flex items-center space-x-1 text-xs text-slate-600 bg-white px-2 py-1 border rounded cursor-pointer hover:border-blue-400">
+                        <input type="checkbox" name="days[]" value="<?php echo $d; ?>" class="text-blue-600 rounded focus:ring-0">
+                        <span><?php echo $d; ?></span>
+                    </label>
+                <?php endforeach; ?>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Beschrijving / Instructie</label>
+                <textarea name="description" rows="3" class="w-full p-2 border border-gray-300 rounded text-sm"></textarea>
+            </div>
+
+            <div class="text-right pt-2">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-xs uppercase shadow-sm">Opslaan</button>
+            </div>
+        </form>
     </div>
 </div>
 
