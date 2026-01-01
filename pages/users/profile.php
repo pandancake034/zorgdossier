@@ -17,7 +17,6 @@ if (!isset($_GET['id'])) {
 $user_id = $_GET['id'];
 
 // 2. DATA OPHALEN
-// We halen alles op uit users én nurse_profiles
 $sql = "SELECT u.username, u.email, u.is_active, np.* FROM users u 
         LEFT JOIN nurse_profiles np ON u.id = np.user_id 
         WHERE u.id = ?";
@@ -26,12 +25,11 @@ $stmt->execute([$user_id]);
 $nurse = $stmt->fetch();
 
 if (!$nurse) {
-    echo "<div class='p-4 bg-red-100 text-red-700'>Gebruiker niet gevonden.</div>";
+    echo "<div class='p-4 bg-red-50 text-red-700 border-l-4 border-red-600'>Gebruiker niet gevonden.</div>";
     exit;
 }
 
-// 3. BEREKENINGEN (Handig voor management)
-// Geschatte maandkosten = Uurloon * Uren per week * 4.33 (gemiddelde weken per maand)
+// 3. BEREKENINGEN
 $monthly_cost = 0;
 if ($nurse['hourly_wage'] && $nurse['contract_hours']) {
     $monthly_cost = $nurse['hourly_wage'] * $nurse['contract_hours'] * 4.33;
@@ -41,105 +39,118 @@ if ($nurse['hourly_wage'] && $nurse['contract_hours']) {
 <div class="max-w-5xl mx-auto mb-10">
     
     <div class="flex justify-between items-center mb-6 print:hidden">
-        <a href="index.php" class="text-teal-600 hover:underline flex items-center">
-            ← Terug naar overzicht
+        <a href="index.php" class="text-slate-500 hover:text-teal-700 font-bold text-sm uppercase flex items-center transition">
+            <i class="fa-solid fa-arrow-left mr-2"></i> Terug naar overzicht
         </a>
-        <div class="space-x-2">
-            <button onclick="window.print()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded inline-flex items-center">
-                🖨️ Print Dossier
+        <div class="flex gap-2">
+            <button onclick="window.print()" class="bg-white border border-gray-300 text-slate-700 hover:bg-gray-50 font-bold py-2 px-4 text-sm shadow-sm flex items-center">
+                <i class="fa-solid fa-print mr-2"></i> Printen
             </button>
-            <a href="edit.php?id=<?php echo $user_id; ?>" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded">
-                ✏️ Bewerken
+            <a href="edit.php?id=<?php echo $user_id; ?>" class="bg-teal-700 hover:bg-teal-800 text-white font-bold py-2 px-4 text-sm shadow-sm flex items-center transition-colors">
+                <i class="fa-solid fa-pen-to-square mr-2"></i> Bewerken
             </a>
         </div>
     </div>
 
-    <div class="bg-white shadow-xl rounded-lg overflow-hidden border border-gray-200">
+    <div class="bg-white shadow-sm border border-gray-300">
         
-        <div class="bg-teal-700 p-8 text-white flex justify-between items-start">
-            <div class="flex items-center space-x-6">
-                <div class="h-24 w-24 bg-teal-500 rounded-full flex items-center justify-center text-4xl border-4 border-white shadow-lg">
-                    <?php echo $nurse['gender'] == 'M' ? '👨🏾‍⚕️' : '👩🏾‍⚕️'; ?>
+        <div class="bg-teal-700 p-8 text-white flex flex-col md:flex-row justify-between items-start md:items-center">
+            <div class="flex items-center gap-6">
+                <div class="h-24 w-24 bg-teal-800 flex items-center justify-center text-4xl border-4 border-teal-600 shadow-sm text-teal-100">
+                    <i class="fa-solid fa-user-nurse"></i>
                 </div>
+                
                 <div>
-                    <h1 class="text-3xl font-bold">
+                    <h1 class="text-3xl font-bold tracking-tight">
                         <?php echo htmlspecialchars($nurse['first_name'] . ' ' . $nurse['last_name']); ?>
                     </h1>
-                    <p class="text-teal-200 text-lg uppercase tracking-wide font-semibold mt-1">
-                        <?php echo htmlspecialchars($nurse['job_title']); ?>
+                    <p class="text-teal-200 text-sm uppercase tracking-wider font-bold mt-1 flex items-center">
+                        <i class="fa-solid fa-id-badge mr-2"></i> <?php echo htmlspecialchars($nurse['job_title']); ?>
                     </p>
-                    <div class="mt-3 flex space-x-3">
-                        <span class="bg-teal-800 px-3 py-1 rounded text-xs border border-teal-600">
+                    
+                    <div class="mt-4 flex gap-3">
+                        <span class="bg-teal-900 text-teal-100 px-3 py-1 text-xs border border-teal-600 font-bold uppercase">
                             <?php echo htmlspecialchars($nurse['contract_type']); ?>
                         </span>
                         <?php if($nurse['is_active']): ?>
-                            <span class="bg-green-500 text-white px-3 py-1 rounded text-xs font-bold">ACTIEF</span>
+                            <span class="bg-green-600 text-white px-3 py-1 text-xs font-bold uppercase border border-green-700">
+                                <i class="fa-solid fa-check mr-1"></i> Actief
+                            </span>
                         <?php else: ?>
-                            <span class="bg-red-500 text-white px-3 py-1 rounded text-xs font-bold">INACTIEF</span>
+                            <span class="bg-red-600 text-white px-3 py-1 text-xs font-bold uppercase border border-red-700">
+                                <i class="fa-solid fa-ban mr-1"></i> Inactief
+                            </span>
                         <?php endif; ?>
                     </div>
                 </div>
             </div>
             
-            <div class="text-right opacity-75 hidden md:block">
-                <h3 class="font-bold text-xl">Zorgdossier Suriname</h3>
-                <p class="text-sm">Personeelsdossier</p>
+            <div class="text-right hidden md:block opacity-80">
+                <div class="text-2xl font-bold"><i class="fa-solid fa-folder-open"></i></div>
+                <p class="text-xs uppercase tracking-widest mt-1">Personeelsdossier</p>
             </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3">
             
-            <div class="p-8 bg-gray-50 border-r border-gray-200 md:col-span-1">
-                <h3 class="text-gray-500 uppercase tracking-widest text-xs font-bold mb-4 border-b pb-2">Persoonlijke Gegevens</h3>
+            <div class="p-8 bg-slate-50 border-r border-gray-300 md:col-span-1">
                 
-                <ul class="space-y-4 text-sm text-gray-700">
+                <h3 class="text-slate-400 uppercase tracking-widest text-xs font-bold mb-6 border-b border-gray-200 pb-2">
+                    Persoonlijk
+                </h3>
+                
+                <ul class="space-y-6 text-sm text-slate-700">
                     <li class="flex items-start">
-                        <span class="w-8 text-xl">🎂</span>
+                        <div class="w-8 text-slate-400 text-center mr-3"><i class="fa-solid fa-cake-candles text-lg"></i></div>
                         <div>
-                            <span class="block text-xs text-gray-500">Geboortedatum</span>
-                            <?php echo date('d-m-Y', strtotime($nurse['dob'])); ?>
+                            <span class="block text-[10px] text-slate-400 uppercase font-bold">Geboortedatum</span>
+                            <span class="font-medium"><?php echo date('d-m-Y', strtotime($nurse['dob'])); ?></span>
                         </div>
                     </li>
                     <li class="flex items-start">
-                        <span class="w-8 text-xl">🚻</span>
+                        <div class="w-8 text-slate-400 text-center mr-3"><i class="fa-solid fa-venus-mars text-lg"></i></div>
                         <div>
-                            <span class="block text-xs text-gray-500">Geslacht</span>
-                            <?php echo $nurse['gender'] == 'M' ? 'Man' : 'Vrouw'; ?>
+                            <span class="block text-[10px] text-slate-400 uppercase font-bold">Geslacht</span>
+                            <span class="font-medium"><?php echo $nurse['gender'] == 'M' ? 'Man' : 'Vrouw'; ?></span>
                         </div>
                     </li>
                     <li class="flex items-start">
-                        <span class="w-8 text-xl">🚘</span>
+                        <div class="w-8 text-slate-400 text-center mr-3"><i class="fa-solid fa-car text-lg"></i></div>
                         <div>
-                            <span class="block text-xs text-gray-500">Vervoer</span>
-                            <?php echo $nurse['has_car'] ? 'Eigen Auto' : 'Geen auto'; ?>
+                            <span class="block text-[10px] text-slate-400 uppercase font-bold">Vervoer</span>
+                            <span class="font-medium"><?php echo $nurse['has_car'] ? 'Eigen Auto' : 'Geen eigen vervoer'; ?></span>
                         </div>
                     </li>
                 </ul>
 
-                <h3 class="text-gray-500 uppercase tracking-widest text-xs font-bold mb-4 mt-8 border-b pb-2">Contact & Adres</h3>
+                <h3 class="text-slate-400 uppercase tracking-widest text-xs font-bold mb-6 mt-10 border-b border-gray-200 pb-2">
+                    Contact
+                </h3>
                 
-                <ul class="space-y-4 text-sm text-gray-700">
+                <ul class="space-y-6 text-sm text-slate-700">
                     <li class="flex items-start">
-                        <span class="w-8 text-xl">📞</span>
+                        <div class="w-8 text-slate-400 text-center mr-3"><i class="fa-solid fa-phone text-lg"></i></div>
                         <div>
-                            <span class="block text-xs text-gray-500">Telefoon</span>
-                            <?php echo htmlspecialchars($nurse['phone']); ?>
+                            <span class="block text-[10px] text-slate-400 uppercase font-bold">Telefoon</span>
+                            <span class="font-medium"><?php echo htmlspecialchars($nurse['phone']); ?></span>
                         </div>
                     </li>
                     <li class="flex items-start">
-                        <span class="w-8 text-xl">📧</span>
+                        <div class="w-8 text-slate-400 text-center mr-3"><i class="fa-solid fa-envelope text-lg"></i></div>
                         <div>
-                            <span class="block text-xs text-gray-500">Email (Inlog)</span>
-                            <?php echo htmlspecialchars($nurse['email']); ?>
+                            <span class="block text-[10px] text-slate-400 uppercase font-bold">Email</span>
+                            <a href="mailto:<?php echo htmlspecialchars($nurse['email']); ?>" class="text-blue-600 hover:underline break-all font-medium">
+                                <?php echo htmlspecialchars($nurse['email']); ?>
+                            </a>
                         </div>
                     </li>
                     <li class="flex items-start">
-                        <span class="w-8 text-xl">📍</span>
+                        <div class="w-8 text-slate-400 text-center mr-3"><i class="fa-solid fa-location-dot text-lg"></i></div>
                         <div>
-                            <span class="block text-xs text-gray-500">Woonadres</span>
-                            <?php echo htmlspecialchars($nurse['address']); ?><br>
-                            <?php echo htmlspecialchars($nurse['neighborhood']); ?><br>
-                            <?php echo htmlspecialchars($nurse['district']); ?>
+                            <span class="block text-[10px] text-slate-400 uppercase font-bold">Adres</span>
+                            <span class="font-medium block"><?php echo htmlspecialchars($nurse['address']); ?></span>
+                            <span class="text-slate-500 block"><?php echo htmlspecialchars($nurse['neighborhood']); ?></span>
+                            <span class="text-slate-500 block"><?php echo htmlspecialchars($nurse['district']); ?></span>
                         </div>
                     </li>
                 </ul>
@@ -148,52 +159,57 @@ if ($nurse['hourly_wage'] && $nurse['contract_hours']) {
             <div class="p-8 md:col-span-2">
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                    <div>
-                        <h3 class="text-teal-700 font-bold text-lg mb-4 flex items-center">
-                            <span class="bg-teal-100 p-2 rounded-full mr-2">💼</span> Contract Details
-                        </h3>
-                        <div class="bg-white border rounded p-4 shadow-sm">
-                            <div class="mb-3">
-                                <span class="block text-xs text-gray-500 uppercase">Datum in dienst</span>
-                                <span class="font-semibold text-gray-800"><?php echo date('d-m-Y', strtotime($nurse['date_employed'])); ?></span>
-                            </div>
-                            <div class="mb-3">
-                                <span class="block text-xs text-gray-500 uppercase">Contracturen (p.w.)</span>
-                                <span class="font-semibold text-gray-800"><?php echo number_format($nurse['contract_hours'], 2, ',', '.'); ?> uur</span>
+                    
+                    <div class="bg-white border border-gray-200 shadow-sm p-0">
+                        <div class="bg-slate-50 px-4 py-3 border-b border-gray-200 flex items-center">
+                            <i class="fa-solid fa-file-contract text-teal-600 mr-2"></i>
+                            <h3 class="text-xs font-bold text-slate-700 uppercase">Contract Info</h3>
+                        </div>
+                        <div class="p-4 space-y-3">
+                            <div>
+                                <span class="block text-[10px] text-slate-400 uppercase font-bold">Datum in dienst</span>
+                                <span class="font-bold text-slate-800"><?php echo date('d-m-Y', strtotime($nurse['date_employed'])); ?></span>
                             </div>
                             <div>
-                                <span class="block text-xs text-gray-500 uppercase">Type Dienstverband</span>
-                                <span class="font-semibold text-gray-800"><?php echo $nurse['contract_type']; ?></span>
+                                <span class="block text-[10px] text-slate-400 uppercase font-bold">Contracturen (p/w)</span>
+                                <span class="font-bold text-slate-800"><?php echo number_format($nurse['contract_hours'], 1, ',', '.'); ?> uur</span>
+                            </div>
+                            <div>
+                                <span class="block text-[10px] text-slate-400 uppercase font-bold">Dienstverband</span>
+                                <span class="font-bold text-slate-800"><?php echo $nurse['contract_type']; ?></span>
                             </div>
                         </div>
                     </div>
 
-                    <div>
-                        <h3 class="text-teal-700 font-bold text-lg mb-4 flex items-center">
-                            <span class="bg-yellow-100 p-2 rounded-full mr-2">💰</span> Salaris & Kosten
-                        </h3>
-                        <div class="bg-yellow-50 border border-yellow-200 rounded p-4">
-                            <div class="flex justify-between mb-2 border-b border-yellow-200 pb-2">
-                                <span class="text-sm text-gray-600">Uurloon</span>
-                                <span class="font-bold text-gray-800">SRD <?php echo number_format($nurse['hourly_wage'], 2, ',', '.'); ?></span>
+                    <div class="bg-white border border-gray-200 shadow-sm p-0">
+                        <div class="bg-blue-50 px-4 py-3 border-b border-blue-100 flex items-center">
+                            <i class="fa-solid fa-money-bill-wave text-blue-600 mr-2"></i>
+                            <h3 class="text-xs font-bold text-blue-900 uppercase">Financieel</h3>
+                        </div>
+                        <div class="p-4">
+                            <div class="flex justify-between border-b border-gray-100 pb-2 mb-2">
+                                <span class="text-xs text-slate-500 font-medium">Uurloon</span>
+                                <span class="text-sm font-bold text-slate-800">SRD <?php echo number_format($nurse['hourly_wage'], 2, ',', '.'); ?></span>
                             </div>
-                            <div class="flex justify-between mb-2 border-b border-yellow-200 pb-2">
-                                <span class="text-sm text-gray-600">Reiskosten</span>
-                                <span class="font-bold text-gray-800">SRD <?php echo number_format($nurse['travel_allowance'], 2, ',', '.'); ?></span>
+                            <div class="flex justify-between border-b border-gray-100 pb-2 mb-2">
+                                <span class="text-xs text-slate-500 font-medium">Reiskosten</span>
+                                <span class="text-sm font-bold text-slate-800">SRD <?php echo number_format($nurse['travel_allowance'], 2, ',', '.'); ?></span>
                             </div>
-                            <div class="flex justify-between mt-3 pt-2">
-                                <span class="text-sm font-bold text-gray-700">Est. Maandlasten</span>
-                                <span class="font-bold text-teal-700 text-lg">SRD <?php echo number_format($monthly_cost, 2, ',', '.'); ?>*</span>
+                            <div class="flex justify-between pt-1">
+                                <span class="text-xs text-slate-500 font-bold uppercase mt-1">Est. Maandlast</span>
+                                <span class="text-lg font-bold text-blue-700">SRD <?php echo number_format($monthly_cost, 2, ',', '.'); ?></span>
                             </div>
-                            <p class="text-xs text-gray-400 mt-2 italic">*Exclusief reiskosten, gebaseerd op 4.33 weken.</p>
+                            <p class="text-[10px] text-slate-400 mt-1 text-right italic">*Indicatie op basis van 4.33 weken</p>
                         </div>
                     </div>
                 </div>
 
                 <div>
-                    <h3 class="text-teal-700 font-bold text-lg mb-2">📝 Bijzonderheden / Notities</h3>
-                    <div class="bg-gray-50 p-4 rounded border border-gray-200 min-h-[100px] text-gray-700 italic">
-                        <?php echo !empty($nurse['notes']) ? nl2br(htmlspecialchars($nurse['notes'])) : "Geen bijzonderheden genoteerd."; ?>
+                    <h3 class="text-slate-700 font-bold text-sm mb-2 flex items-center uppercase tracking-wide">
+                        <i class="fa-solid fa-note-sticky text-slate-400 mr-2"></i> Interne Notities
+                    </h3>
+                    <div class="bg-slate-50 p-5 border border-gray-200 text-sm text-slate-600 leading-relaxed font-mono">
+                        <?php echo !empty($nurse['notes']) ? nl2br(htmlspecialchars($nurse['notes'])) : "<span class='text-slate-400 italic'>Geen notities aanwezig in dit dossier.</span>"; ?>
                     </div>
                 </div>
 
